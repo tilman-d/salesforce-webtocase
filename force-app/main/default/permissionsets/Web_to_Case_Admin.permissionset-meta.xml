@@ -91,8 +91,20 @@
         <apexClass>FormAdminController</apexClass>
         <enabled>true</enabled>
     </classAccesses>
+    <classAccesses>
+        <apexClass>SetupWizardController</apexClass>
+        <enabled>true</enabled>
+    </classAccesses>
     <tabSettings>
         <tab>Form_Manager</tab>
         <visibility>Visible</visibility>
     </tabSettings>
+    <tabSettings>
+        <tab>Setup_Wizard</tab>
+        <visibility>Visible</visibility>
+    </tabSettings>
+    <applicationVisibilities>
+        <application>Web_to_Case_Forms</application>
+        <visible>true</visible>
+    </applicationVisibilities>
 </PermissionSet>

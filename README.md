@@ -19,8 +19,8 @@ Salesforce's native Web-to-Case doesn't support file attachments. This app solve
 |-------|-------------|--------|
 | **Phase 0** | MVP - Core form submission | ✅ Complete |
 | **Phase 1** | Admin UI (LWC form builder) | ✅ Complete |
-| **Phase 2** | Post-Install Setup Wizard | 🔜 **Next up** |
-| **Phase 3** | reCAPTCHA integration | ⬜ Not started |
+| **Phase 2** | Post-Install Setup Wizard | ✅ Complete |
+| **Phase 3** | reCAPTCHA integration | 🔜 **Next up** |
 | **Phase 4** | Embeddable widget, multi-file upload | ⬜ Not started |
 
 ---
@@ -77,6 +77,45 @@ Access via the **Form Manager** tab in Salesforce.
 ### Permission Set Updates
 - Added FormAdminController class access
 - Added Form_Manager tab visibility
+
+---
+
+## What's Built (Phase 2)
+
+### Post-Install Setup Wizard
+Access via the **Setup Wizard** tab or the **Web-to-Case Forms** app in the App Launcher.
+
+**5-Step Wizard Flow:**
+1. **Welcome** - Precondition checks (My Domain, admin permissions, Sites enabled)
+2. **Select Site** - Choose from existing Sites or get instructions to create one
+3. **Configure** - Auto-configure Guest User object/field permissions with security acknowledgment
+4. **Verify** - Manual configuration instructions for Apex class and VF page access with validation
+5. **Complete** - Create sample form, test form, view public URL, link to Form Manager
+
+**Features:**
+- Automatic detection of active Salesforce Sites
+- One-click permission configuration for Guest User profile
+- Support for both Enhanced Profile UI and Classic Profile UI instructions
+- Validation to ensure all permissions are correctly configured
+- Sample "Contact Support" form creation
+- Dynamic public URL generation (works with Enhanced Domains)
+
+### Apex Classes
+- **SetupWizardController** - Site detection, permission configuration, validation, sample form creation
+- **SetupWizardControllerTest** - Unit tests with coverage
+
+### LWC Components
+- **setupWizard** - Multi-step wizard with progress indicator
+
+### Metadata
+- **Setup_Wizard.flexipage-meta.xml** - Lightning App Page
+- **Setup_Wizard.tab-meta.xml** - Navigation tab
+- **Web_to_Case_Forms.app-meta.xml** - Lightning App (consolidates all functionality)
+
+### Permission Set Updates
+- Added SetupWizardController class access
+- Added Setup_Wizard tab visibility
+- Added Web_to_Case_Forms app visibility
 
 ---
 
@@ -171,46 +210,36 @@ Access: `https://[your-domain].my.salesforce-sites.com/support/CaseFormPage?name
 
 ## Roadmap
 
-### Phase 2: Post-Install Setup Wizard (NEXT)
+### Phase 3: reCAPTCHA Integration (NEXT)
 
-**Problem:** Current setup requires 10+ manual steps across multiple Setup screens. Guest User permissions are complex and error-prone. Most admins would give up or misconfigure.
+**Problem:** Public forms are vulnerable to spam and bot submissions. Without CAPTCHA protection, orgs may receive large volumes of junk cases.
 
-**Solution:** An LWC-based 5-step setup wizard.
+**Solution:** Google reCAPTCHA v2 integration with per-form toggle.
 
-**Technical Research Complete:**
-| Configuration | Can Automate | Method |
-|--------------|--------------|--------|
-| Detect existing Sites | ✅ Yes | SOQL on Site object |
-| Create new Site | ❌ No | Manual (Metadata API too complex) |
-| Object Permissions | ✅ Yes | ObjectPermissions via Profile's PermissionSet |
-| Field Permissions | ✅ Yes | FieldPermissions via Profile's PermissionSet |
-| Apex Class Access | ❌ No | Manual (cannot set on Guest Profile programmatically) |
-| VF Page Access | ❌ No | Manual (cannot set on Guest Profile programmatically) |
-| Create sample form | ✅ Yes | Standard DML |
+**Planned Features:**
+- Google reCAPTCHA v2 ("I'm not a robot" checkbox)
+- Per-form toggle (`Enable_Captcha__c` field on Form__c)
+- Protected Custom Settings for API keys (Site Key + Secret Key)
+- Server-side verification in `CaseFormController.submitForm()`
+- Admin UI in Form Manager for enabling/disabling per form
+- Setup Wizard step for configuring reCAPTCHA keys
 
-**Key insight:** Guest User Profiles have a linked PermissionSet record. We can modify ObjectPermissions and FieldPermissions on that PermissionSet to configure the Guest User.
+**Technical Approach:**
+1. Add `Enable_Captcha__c` checkbox field to Form__c
+2. Create `reCAPTCHA_Settings__c` Custom Setting (protected, hierarchy)
+3. Add reCAPTCHA JavaScript to CaseFormPage
+4. Modify CaseFormController to verify token server-side via Google API
+5. Update Form Manager UI to show captcha toggle
+6. Add reCAPTCHA key configuration to Setup Wizard
 
-**Wizard Flow (5 Steps):**
-1. **Welcome & Preconditions** - Check My Domain, admin permissions, Sites enabled
-2. **Select Site** - Choose from existing Sites or guide manual creation
-3. **Auto-Configure** - Set object/field permissions with security warning
-4. **Manual Steps** - Instructions for Apex/VF access with validation
-5. **Complete** - Show public URL, test link, create sample form
-
-**Files to create:**
-- `SetupWizardController.cls` - Site detection, permission config, validation
-- `SetupWizardControllerTest.cls` - Unit tests
-- `setupWizard/` LWC - Multi-step wizard UI
-- `Setup_Wizard.flexipage-meta.xml` - Lightning page
-- `Setup_Wizard.tab-meta.xml` - Navigation tab
-
-**Detailed plan:** See `/root/.claude/plans/parsed-chasing-grove.md`
-
-### Phase 3: reCAPTCHA
-- Google reCAPTCHA v2 integration
-- Per-form toggle (Enable_Captcha__c field on Form__c)
-- Protected custom settings for API keys (site key + secret key)
-- Server-side verification in CaseFormController.submitForm()
+**Files to create/modify:**
+- `reCAPTCHA_Settings__c.object-meta.xml` - Custom Setting for API keys
+- `Form__c.Enable_Captcha__c.field-meta.xml` - New field
+- `CaseFormController.cls` - Add server-side verification
+- `caseFormScript.js` - Add reCAPTCHA widget integration
+- `CaseFormPage.page` - Include reCAPTCHA script
+- `formDetail` LWC - Add captcha toggle
+- `setupWizard` LWC - Add reCAPTCHA configuration step (optional)
 
 ### Phase 4: Advanced Features
 - Embeddable JavaScript widget (for non-Salesforce sites)
@@ -224,6 +253,8 @@ Access: `https://[your-domain].my.salesforce-sites.com/support/CaseFormPage?name
 
 ```
 force-app/main/default/
+├── applications/
+│   └── Web_to_Case_Forms.app-meta.xml   # Phase 2 - Lightning App
 ├── objects/
 │   ├── Form__c/              # Form configuration
 │   ├── Form_Field__c/        # Field definitions
@@ -233,15 +264,20 @@ force-app/main/default/
 │   ├── CaseFormControllerTest.cls
 │   ├── ErrorLogger.cls
 │   ├── ErrorLoggerTest.cls
-│   ├── FormAdminController.cls      # Phase 1
-│   └── FormAdminControllerTest.cls  # Phase 1
+│   ├── FormAdminController.cls          # Phase 1
+│   ├── FormAdminControllerTest.cls      # Phase 1
+│   ├── SetupWizardController.cls        # Phase 2
+│   └── SetupWizardControllerTest.cls    # Phase 2
 ├── lwc/
 │   ├── formAdminApp/         # Phase 1 - Main admin container
-│   └── formDetail/           # Phase 1 - Form editor
+│   ├── formDetail/           # Phase 1 - Form editor
+│   └── setupWizard/          # Phase 2 - Setup wizard
 ├── flexipages/
-│   └── Form_Manager.flexipage-meta.xml  # Phase 1
+│   ├── Form_Manager.flexipage-meta.xml  # Phase 1
+│   └── Setup_Wizard.flexipage-meta.xml  # Phase 2
 ├── tabs/
-│   └── Form_Manager.tab-meta.xml        # Phase 1
+│   ├── Form_Manager.tab-meta.xml        # Phase 1
+│   └── Setup_Wizard.tab-meta.xml        # Phase 2
 ├── pages/
 │   └── CaseFormPage.page
 ├── staticresources/
@@ -278,6 +314,18 @@ force-app/main/default/
 
 ## Changelog
 
+### v0.3.0 (2026-01-28) - Phase 2: Setup Wizard
+- 5-step post-install setup wizard
+- Automatic Guest User permission configuration
+- Site detection and selection
+- Manual configuration instructions (Enhanced + Classic Profile UI)
+- Configuration validation
+- Sample form creation
+- Dynamic public URL generation
+- "Web-to-Case Forms" Lightning App in App Launcher
+- SetupWizardController with unit tests
+- Setup_Wizard Lightning tab
+
 ### v0.2.0 (2026-01-28) - Phase 1: Admin UI
 - LWC Form Manager for creating/editing forms without Setup
 - FormAdminController with CRUD operations (33 tests, 94%+ coverage)
@@ -301,57 +349,50 @@ force-app/main/default/
 
 ## Next Session Starting Point
 
-**Status:** Phase 0 and Phase 1 complete. **Phase 2 planning complete.** Ready to implement.
-
-**Detailed plan location:** `/root/.claude/plans/parsed-chasing-grove.md`
-
----
-
-### Phase 2 Implementation Summary
-
-**Research completed.** Key findings:
-- Sites can be queried via SOQL but not created (need manual creation)
-- Object/Field permissions CAN be set programmatically via ObjectPermissions/FieldPermissions
-- Apex/VF access CANNOT be set programmatically on Guest Profile (must be manual with validation)
-
-**Implementation order:**
-
-1. **Apex Controller** (`SetupWizardController.cls`)
-   ```
-   Methods to implement:
-   - checkPreconditions() - My Domain, admin perms, Sites enabled
-   - getActiveSites() - SOQL on Site object
-   - getSetupStatus(siteId) - Check current permission status
-   - configurePermissions(siteId) - Set ObjectPermissions/FieldPermissions (idempotent)
-   - validateConfiguration(siteId) - Check all perms including Apex/VF access
-   - createSampleForm() - Create "Contact Support" form
-   - getPublicUrl(siteId, formName) - Derive URL from Site object
-   - getConfigSummary(siteId) - For diagnostics download
-   ```
-
-2. **Test Class** (`SetupWizardControllerTest.cls`)
-   - Target 90%+ coverage
-   - Test precondition checks, permission config, validation
-
-3. **LWC Wizard** (`setupWizard/`)
-   - 5-step progress indicator
-   - Step 1: Precondition checks with pass/fail display
-   - Step 2: Site selection with radio buttons, refresh button
-   - Step 3: Security warning + auto-config with retry capability
-   - Step 4: Manual instructions + validation button
-   - Step 5: URL display, test link, sample form creation, diagnostics download
-
-4. **Metadata**
-   - `Setup_Wizard.flexipage-meta.xml`
-   - `Setup_Wizard.tab-meta.xml`
-   - Update permission set
-
-**Key technical notes:**
-- Use `with sharing` on all controllers
-- Make permission config idempotent (safe to retry)
-- Log errors to Error_Log__c
-- Derive URLs dynamically from Site object (works with Enhanced Domains)
+**Status:** Phase 0, Phase 1, and Phase 2 complete. **Ready for Phase 3: reCAPTCHA Integration.**
 
 **Dev org:** `tilman.dietrich@gmail.com.dev` (alias: `devorg`)
 
 **GitHub:** https://github.com/tilman-d/salesforce-webtocase
+
+---
+
+### Phase 3 Implementation Summary
+
+**Goal:** Add Google reCAPTCHA v2 to prevent spam/bot submissions on public forms.
+
+**Implementation order:**
+
+1. **Custom Setting** (`reCAPTCHA_Settings__c`)
+   - Protected hierarchy Custom Setting
+   - Fields: Site_Key__c, Secret_Key__c
+   - Allows different keys per org/profile if needed
+
+2. **Form__c Field** (`Enable_Captcha__c`)
+   - Checkbox field to toggle reCAPTCHA per form
+   - Default: false (opt-in)
+
+3. **Frontend Integration**
+   - Add Google reCAPTCHA script to CaseFormPage
+   - Render widget when form has captcha enabled
+   - Pass token with form submission
+
+4. **Backend Verification**
+   - Modify CaseFormController.submitForm()
+   - Verify reCAPTCHA token via Google API (HTTP callout)
+   - Reject submission if verification fails
+   - Add Remote Site Setting for google.com
+
+5. **Admin UI Updates**
+   - Add captcha toggle to formDetail LWC
+   - Add Field Permission for Enable_Captcha__c
+
+6. **Setup Wizard Updates** (optional)
+   - Add step for configuring reCAPTCHA keys
+   - Or separate admin page for key management
+
+**Key technical notes:**
+- Use Named Credential or Remote Site Setting for Google API
+- Store Secret Key securely (Custom Setting, not exposed to client)
+- Handle verification timeout gracefully
+- Consider rate limiting on verification failures

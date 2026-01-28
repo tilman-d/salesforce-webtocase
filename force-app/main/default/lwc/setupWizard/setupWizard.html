@@ -1,0 +1,523 @@
+<template>
+    <lightning-card title="Setup Wizard" icon-name="utility:setup_assistant_guide">
+        <!-- Progress Indicator -->
+        <div class="slds-p-horizontal_medium slds-p-top_medium">
+            <lightning-progress-indicator
+                current-step={currentStep}
+                type="path"
+                variant="base">
+                <template for:each={steps} for:item="step">
+                    <lightning-progress-step
+                        key={step.value}
+                        label={step.label}
+                        value={step.value}>
+                    </lightning-progress-step>
+                </template>
+            </lightning-progress-indicator>
+        </div>
+
+        <!-- Loading Spinner -->
+        <template if:true={isLoading}>
+            <div class="slds-is-relative slds-p-around_large" style="min-height: 200px;">
+                <lightning-spinner alternative-text="Loading" size="medium"></lightning-spinner>
+            </div>
+        </template>
+
+        <template if:false={isLoading}>
+            <!-- Step 1: Welcome & Preconditions -->
+            <template if:true={isStep1}>
+                <div class="slds-p-around_medium">
+                    <div class="slds-text-heading_medium slds-m-bottom_medium">Welcome to the Setup Wizard</div>
+                    <p class="slds-m-bottom_medium">
+                        This wizard will guide you through configuring your Web-to-Case form for public access.
+                        The setup process includes:
+                    </p>
+                    <ul class="slds-list_dotted slds-m-bottom_medium">
+                        <li>Selecting a Salesforce Site for hosting your form</li>
+                        <li>Configuring Guest User permissions for form submission</li>
+                        <li>Verifying the configuration is complete</li>
+                        <li>Testing your public form</li>
+                    </ul>
+
+                    <div class="slds-box slds-m-bottom_medium">
+                        <div class="slds-text-heading_small slds-m-bottom_small">Precondition Checks</div>
+
+                        <template if:true={preconditionsChecked}>
+                            <!-- My Domain Check -->
+                            <div class="slds-grid slds-grid_vertical-align-center slds-m-bottom_x-small">
+                                <template if:true={preconditions.myDomainDeployed}>
+                                    <lightning-icon icon-name="utility:success" size="x-small" variant="success" class="slds-m-right_x-small"></lightning-icon>
+                                    <span class="slds-text-color_success">My Domain is deployed</span>
+                                </template>
+                                <template if:false={preconditions.myDomainDeployed}>
+                                    <lightning-icon icon-name="utility:error" size="x-small" variant="error" class="slds-m-right_x-small"></lightning-icon>
+                                    <span class="slds-text-color_error">My Domain is not deployed</span>
+                                </template>
+                            </div>
+
+                            <!-- Admin Permissions Check -->
+                            <div class="slds-grid slds-grid_vertical-align-center slds-m-bottom_x-small">
+                                <template if:true={preconditions.hasAdminPermissions}>
+                                    <lightning-icon icon-name="utility:success" size="x-small" variant="success" class="slds-m-right_x-small"></lightning-icon>
+                                    <span class="slds-text-color_success">Admin permissions verified</span>
+                                </template>
+                                <template if:false={preconditions.hasAdminPermissions}>
+                                    <lightning-icon icon-name="utility:error" size="x-small" variant="error" class="slds-m-right_x-small"></lightning-icon>
+                                    <span class="slds-text-color_error">Missing Modify All Data or Customize Application permission</span>
+                                </template>
+                            </div>
+
+                            <!-- Sites Feature Check -->
+                            <div class="slds-grid slds-grid_vertical-align-center slds-m-bottom_x-small">
+                                <template if:true={preconditions.sitesEnabled}>
+                                    <lightning-icon icon-name="utility:success" size="x-small" variant="success" class="slds-m-right_x-small"></lightning-icon>
+                                    <span class="slds-text-color_success">Sites feature is enabled</span>
+                                </template>
+                                <template if:false={preconditions.sitesEnabled}>
+                                    <lightning-icon icon-name="utility:error" size="x-small" variant="error" class="slds-m-right_x-small"></lightning-icon>
+                                    <span class="slds-text-color_error">Sites feature is not enabled</span>
+                                </template>
+                            </div>
+
+                            <template if:false={preconditions.allPassed}>
+                                <div class="slds-box slds-box_x-small slds-theme_error slds-m-top_small">
+                                    <p>Please resolve the issues above before continuing. You may need to:</p>
+                                    <ul class="slds-list_dotted slds-m-top_x-small">
+                                        <template if:false={preconditions.myDomainDeployed}>
+                                            <li><a href="https://help.salesforce.com/s/articleView?id=sf.domain_name_overview.htm" target="_blank">Deploy My Domain</a></li>
+                                        </template>
+                                        <template if:false={preconditions.hasAdminPermissions}>
+                                            <li>Log in as a System Administrator</li>
+                                        </template>
+                                        <template if:false={preconditions.sitesEnabled}>
+                                            <li><a href="https://help.salesforce.com/s/articleView?id=sf.sites_overview.htm" target="_blank">Enable Salesforce Sites</a></li>
+                                        </template>
+                                    </ul>
+                                </div>
+                            </template>
+                        </template>
+                    </div>
+
+                    <lightning-button
+                        label="Re-check Preconditions"
+                        variant="neutral"
+                        onclick={loadPreconditions}
+                        class="slds-m-right_small">
+                    </lightning-button>
+                </div>
+            </template>
+
+            <!-- Step 2: Select Site -->
+            <template if:true={isStep2}>
+                <div class="slds-p-around_medium">
+                    <div class="slds-text-heading_medium slds-m-bottom_medium">Select a Site</div>
+                    <p class="slds-m-bottom_medium">
+                        Choose the Salesforce Site where your public form will be hosted.
+                        The Site's Guest User will be configured to access the form.
+                    </p>
+
+                    <template if:true={hasSites}>
+                        <lightning-radio-group
+                            name="siteSelection"
+                            label="Available Sites"
+                            options={siteOptions}
+                            value={selectedSiteId}
+                            onchange={handleSiteSelection}
+                            type="radio">
+                        </lightning-radio-group>
+
+                        <template if:true={selectedSite}>
+                            <div class="slds-box slds-m-top_medium">
+                                <div class="slds-text-title_caps slds-m-bottom_x-small">Selected Site Details</div>
+                                <dl class="slds-list_horizontal slds-wrap">
+                                    <dt class="slds-item_label slds-text-color_weak">Name:</dt>
+                                    <dd class="slds-item_detail">{selectedSite.masterLabel}</dd>
+                                    <dt class="slds-item_label slds-text-color_weak">Status:</dt>
+                                    <dd class="slds-item_detail">{selectedSite.status}</dd>
+                                    <template if:true={selectedSite.baseUrl}>
+                                        <dt class="slds-item_label slds-text-color_weak">Base URL:</dt>
+                                        <dd class="slds-item_detail">{selectedSite.baseUrl}</dd>
+                                    </template>
+                                </dl>
+                            </div>
+                        </template>
+                    </template>
+
+                    <template if:false={hasSites}>
+                        <div class="slds-box slds-theme_shade slds-p-around_medium">
+                            <div class="slds-grid slds-grid_vertical-align-center slds-m-bottom_medium">
+                                <lightning-icon icon-name="utility:warning" size="medium" class="slds-m-right_small"></lightning-icon>
+                                <h3 class="slds-text-heading_small">No Active Sites Found</h3>
+                            </div>
+                            <p class="slds-m-bottom_medium">
+                                You need to create a Salesforce Site to host your public form. Follow these steps:
+                            </p>
+                            <div class="slds-box slds-box_x-small slds-m-bottom_medium">
+                                <div class="slds-text-title_bold slds-m-bottom_x-small">How to Create a Site:</div>
+                                <ol class="slds-list_ordered">
+                                    <li>Go to <strong>Setup</strong> &gt; search "<strong>Sites</strong>" in Quick Find</li>
+                                    <li>Click <strong>Sites</strong> (under Sites and Domains)</li>
+                                    <li>Register your <strong>Sites Domain</strong> if prompted (e.g., your-company.my.site.com)</li>
+                                    <li>Click <strong>New</strong> to create a new Site</li>
+                                    <li>Enter a <strong>Site Label</strong> (e.g., "Support")</li>
+                                    <li>Enter a <strong>Site Name</strong> (e.g., "Support")</li>
+                                    <li>Select <strong>Active Site Home Page</strong>: choose any page or leave default</li>
+                                    <li>Check <strong>Active</strong> to activate the site</li>
+                                    <li>Click <strong>Save</strong></li>
+                                </ol>
+                            </div>
+                            <div class="slds-grid slds-grid_align-center">
+                                <lightning-button
+                                    label="Open Sites Setup"
+                                    variant="brand"
+                                    onclick={handleOpenSitesSetup}
+                                    icon-name="utility:new_window"
+                                    class="slds-m-right_small">
+                                </lightning-button>
+                                <lightning-button
+                                    label="Refresh Sites"
+                                    variant="neutral"
+                                    onclick={handleRefreshSites}
+                                    icon-name="utility:refresh">
+                                </lightning-button>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </template>
+
+            <!-- Step 3: Configure Permissions -->
+            <template if:true={isStep3}>
+                <div class="slds-p-around_medium">
+                    <div class="slds-text-heading_medium slds-m-bottom_medium">Configure Guest User Permissions</div>
+
+                    <!-- Security Warning -->
+                    <div class="slds-box slds-theme_warning slds-m-bottom_medium">
+                        <div class="slds-grid slds-grid_vertical-align-center slds-m-bottom_small">
+                            <lightning-icon icon-name="utility:warning" variant="warning" class="slds-m-right_small"></lightning-icon>
+                            <span class="slds-text-heading_small">Security Notice</span>
+                        </div>
+                        <p class="slds-m-bottom_small">
+                            This will grant Guest Users (unauthenticated visitors) access to:
+                        </p>
+                        <ul class="slds-list_dotted slds-m-bottom_small">
+                            <li>Read form configuration (Form__c, Form_Field__c)</li>
+                            <li>Create Cases</li>
+                            <li>Upload file attachments (ContentVersion, ContentDocumentLink)</li>
+                            <li>Create error logs (Error_Log__c)</li>
+                        </ul>
+                        <lightning-input
+                            type="checkbox"
+                            label="I understand and acknowledge these permissions"
+                            checked={securityAcknowledged}
+                            onchange={handleSecurityAcknowledge}>
+                        </lightning-input>
+                    </div>
+
+                    <template if:false={autoConfigComplete}>
+                        <lightning-button
+                            label="Configure Permissions"
+                            variant="brand"
+                            onclick={handleAutoConfig}
+                            disabled={isConfigureDisabled}>
+                        </lightning-button>
+                    </template>
+
+                    <template if:true={autoConfigComplete}>
+                        <div class="slds-text-heading_small slds-m-bottom_small">Configuration Results</div>
+                        <div class="slds-box slds-m-bottom_medium">
+                            <table class="slds-table slds-table_bordered">
+                                <thead>
+                                    <tr>
+                                        <th scope="col">Permission</th>
+                                        <th scope="col">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <template for:each={automatablePermissions} for:item="perm">
+                                        <tr key={perm.name}>
+                                            <td>
+                                                <div class="slds-truncate">{perm.name}</div>
+                                                <div class="slds-text-body_small slds-text-color_weak">{perm.description}</div>
+                                            </td>
+                                            <td>
+                                                <template if:true={perm.configured}>
+                                                    <lightning-icon icon-name="utility:success" size="x-small" variant="success" class="slds-m-right_x-small"></lightning-icon>
+                                                    <span class="slds-text-color_success">Configured</span>
+                                                </template>
+                                                <template if:false={perm.configured}>
+                                                    <lightning-icon icon-name="utility:error" size="x-small" variant="error" class="slds-m-right_x-small"></lightning-icon>
+                                                    <span class="slds-text-color_error">Failed</span>
+                                                    <template if:true={perm.errorMessage}>
+                                                        <div class="slds-text-body_small slds-text-color_error">{perm.errorMessage}</div>
+                                                    </template>
+                                                </template>
+                                            </td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <template if:true={hasFailedAutomatable}>
+                            <lightning-button
+                                label="Retry Failed"
+                                variant="neutral"
+                                onclick={handleRetryConfig}
+                                icon-name="utility:refresh"
+                                class="slds-m-right_small">
+                            </lightning-button>
+                        </template>
+
+                        <template if:true={autoConfigSuccess}>
+                            <div class="slds-box slds-box_x-small slds-theme_success slds-m-top_medium">
+                                <lightning-icon icon-name="utility:success" size="x-small" variant="inverse" class="slds-m-right_x-small"></lightning-icon>
+                                All automatable permissions configured successfully!
+                            </div>
+                        </template>
+                    </template>
+                </div>
+            </template>
+
+            <!-- Step 4: Verify Manual Steps -->
+            <template if:true={isStep4}>
+                <div class="slds-p-around_medium">
+                    <div class="slds-text-heading_medium slds-m-bottom_medium">Verify Configuration</div>
+                    <p class="slds-m-bottom_medium">
+                        Some permissions require manual configuration. Please complete the steps below and then validate.
+                    </p>
+
+                    <!-- Manual Steps Instructions -->
+                    <div class="slds-box slds-m-bottom_medium">
+                        <div class="slds-text-heading_small slds-m-bottom_small">Manual Configuration Required</div>
+                        <p class="slds-text-body_small slds-text-color_weak slds-m-bottom_medium">
+                            Navigate to the Guest User Profile: <strong>Setup</strong> &gt; search "<strong>Sites</strong>" &gt; click your Site's label &gt; click <strong>Public Access Settings</strong>
+                        </p>
+
+                        <div class="slds-m-bottom_medium">
+                            <div class="slds-text-title_bold slds-m-bottom_x-small">1. Grant Apex Class Access</div>
+                            <p class="slds-text-body_small slds-m-bottom_x-small"><em>Enhanced Profile UI:</em></p>
+                            <ol class="slds-list_ordered slds-m-bottom_x-small">
+                                <li>In the Apps section, click <strong>Apex Class Access</strong></li>
+                                <li>Click <strong>Edit</strong>, move <strong>CaseFormController</strong> and <strong>ErrorLogger</strong> to Enabled, click <strong>Save</strong></li>
+                            </ol>
+                            <p class="slds-text-body_small slds-m-bottom_x-small"><em>Classic Profile UI:</em></p>
+                            <ol class="slds-list_ordered">
+                                <li>Scroll to <strong>Enabled Apex Class Access</strong>, click <strong>Edit</strong></li>
+                                <li>Add <strong>CaseFormController</strong> and <strong>ErrorLogger</strong>, click <strong>Save</strong></li>
+                            </ol>
+                        </div>
+
+                        <div class="slds-m-bottom_medium">
+                            <div class="slds-text-title_bold slds-m-bottom_x-small">2. Grant Visualforce Page Access</div>
+                            <p class="slds-text-body_small slds-m-bottom_x-small"><em>Enhanced Profile UI:</em></p>
+                            <ol class="slds-list_ordered slds-m-bottom_x-small">
+                                <li>In the Apps section, click <strong>Visualforce Page Access</strong></li>
+                                <li>Click <strong>Edit</strong>, move <strong>CaseFormPage</strong> to Enabled, click <strong>Save</strong></li>
+                            </ol>
+                            <p class="slds-text-body_small slds-m-bottom_x-small"><em>Classic Profile UI:</em></p>
+                            <ol class="slds-list_ordered">
+                                <li>Scroll to <strong>Enabled Visualforce Page Access</strong>, click <strong>Edit</strong></li>
+                                <li>Add <strong>CaseFormPage</strong>, click <strong>Save</strong></li>
+                            </ol>
+                        </div>
+
+                    </div>
+
+                    <!-- Validation Results -->
+                    <template if:true={validationResults.length}>
+                        <div class="slds-text-heading_small slds-m-bottom_small">Validation Results</div>
+                        <div class="slds-box slds-m-bottom_medium">
+                            <table class="slds-table slds-table_bordered">
+                                <thead>
+                                    <tr>
+                                        <th scope="col">Permission</th>
+                                        <th scope="col">Type</th>
+                                        <th scope="col">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <template for:each={validationResults} for:item="perm">
+                                        <tr key={perm.name}>
+                                            <td>
+                                                <div class="slds-truncate">{perm.name}</div>
+                                            </td>
+                                            <td>
+                                                <template if:true={perm.canAutomate}>
+                                                    <lightning-badge label="Auto"></lightning-badge>
+                                                </template>
+                                                <template if:false={perm.canAutomate}>
+                                                    <lightning-badge label="Manual" class="slds-badge_inverse"></lightning-badge>
+                                                </template>
+                                            </td>
+                                            <td>
+                                                <template if:true={perm.configured}>
+                                                    <lightning-icon icon-name="utility:success" size="x-small" variant="success" class="slds-m-right_x-small"></lightning-icon>
+                                                    <span class="slds-text-color_success">OK</span>
+                                                </template>
+                                                <template if:false={perm.configured}>
+                                                    <lightning-icon icon-name="utility:error" size="x-small" variant="error" class="slds-m-right_x-small"></lightning-icon>
+                                                    <span class="slds-text-color_error">Missing</span>
+                                                </template>
+                                            </td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <template if:true={validationPassed}>
+                            <div class="slds-box slds-box_x-small slds-theme_success slds-m-bottom_medium">
+                                <lightning-icon icon-name="utility:success" size="x-small" variant="inverse" class="slds-m-right_x-small"></lightning-icon>
+                                All validations passed! You can proceed to the final step.
+                            </div>
+                        </template>
+
+                        <template if:false={validationPassed}>
+                            <div class="slds-box slds-box_x-small slds-theme_error slds-m-bottom_medium">
+                                <lightning-icon icon-name="utility:error" size="x-small" variant="inverse" class="slds-m-right_x-small"></lightning-icon>
+                                Some validations failed. Please complete the manual steps above and validate again.
+                            </div>
+                        </template>
+                    </template>
+
+                    <lightning-button
+                        label="Validate Configuration"
+                        variant="brand"
+                        onclick={handleValidate}
+                        icon-name="utility:check">
+                    </lightning-button>
+                </div>
+            </template>
+
+            <!-- Step 5: Complete -->
+            <template if:true={isStep5}>
+                <div class="slds-p-around_medium">
+                    <div class="slds-text-align_center slds-m-bottom_large">
+                        <lightning-icon icon-name="utility:success" size="large" variant="success"></lightning-icon>
+                        <h2 class="slds-text-heading_large slds-m-top_small">Setup Complete!</h2>
+                        <p class="slds-text-body_regular slds-m-top_small">
+                            Your Web-to-Case form is now configured and ready to use.
+                        </p>
+                    </div>
+
+                    <!-- Sample Form -->
+                    <div class="slds-box slds-m-bottom_medium">
+                        <div class="slds-text-heading_small slds-m-bottom_small">1. Create a Sample Form</div>
+                        <template if:false={sampleFormCreated}>
+                            <p class="slds-m-bottom_small">
+                                Create a sample "Contact Support" form to test your setup.
+                            </p>
+                            <lightning-button
+                                label="Create Sample Form"
+                                variant="brand"
+                                onclick={handleCreateSampleForm}
+                                icon-name="utility:add">
+                            </lightning-button>
+                        </template>
+                        <template if:true={sampleFormCreated}>
+                            <div class="slds-grid slds-grid_vertical-align-center">
+                                <lightning-icon icon-name="utility:success" size="x-small" variant="success" class="slds-m-right_x-small"></lightning-icon>
+                                <span class="slds-text-color_success">Sample form created!</span>
+                            </div>
+                        </template>
+                    </div>
+
+                    <!-- Test Form -->
+                    <div class="slds-box slds-m-bottom_medium">
+                        <div class="slds-text-heading_small slds-m-bottom_small">2. Test Your Form</div>
+                        <template if:true={sampleFormCreated}>
+                            <p class="slds-m-bottom_small">
+                                Open the form in a new tab to verify everything works.
+                            </p>
+                            <lightning-button
+                                label="Test Form (Opens in New Tab)"
+                                variant="brand"
+                                onclick={handleTestForm}
+                                icon-name="utility:new_window">
+                            </lightning-button>
+                            <p class="slds-text-body_small slds-text-color_weak slds-m-top_x-small">
+                                Tip: Test in an incognito/private browser window to simulate the guest user experience.
+                            </p>
+                        </template>
+                        <template if:false={sampleFormCreated}>
+                            <p class="slds-text-body_small slds-text-color_weak">
+                                Create the sample form above first to test your setup.
+                            </p>
+                        </template>
+                    </div>
+
+                    <!-- Public URL -->
+                    <div class="slds-box slds-m-bottom_medium">
+                        <div class="slds-text-heading_small slds-m-bottom_small">Your Public Form URL</div>
+                        <p class="slds-text-body_small slds-m-bottom_small">
+                            Use this base URL with <strong>?form=your-form-name</strong> to access any form you create.
+                        </p>
+                        <div class="slds-grid slds-grid_vertical-align-center">
+                            <div class="slds-col slds-grow">
+                                <lightning-input
+                                    type="url"
+                                    value={publicUrl}
+                                    readonly
+                                    variant="label-hidden">
+                                </lightning-input>
+                            </div>
+                            <div class="slds-col slds-shrink slds-m-left_small">
+                                <lightning-button-icon
+                                    icon-name="utility:copy"
+                                    alternative-text="Copy URL"
+                                    onclick={handleCopyUrl}>
+                                </lightning-button-icon>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Actions -->
+                    <div class="slds-box slds-m-bottom_medium">
+                        <div class="slds-text-heading_small slds-m-bottom_small">Next Steps</div>
+                        <lightning-button
+                            label="Go to Form Manager"
+                            variant="brand"
+                            onclick={handleGoToFormManager}
+                            icon-name="utility:edit_form">
+                        </lightning-button>
+                    </div>
+
+                    <!-- Note about reCAPTCHA -->
+                    <div class="slds-box slds-box_x-small slds-theme_shade">
+                        <lightning-icon icon-name="utility:info" size="x-small" class="slds-m-right_x-small"></lightning-icon>
+                        <strong>Note:</strong> For production use, consider adding reCAPTCHA to protect against spam submissions.
+                    </div>
+                </div>
+            </template>
+
+            <!-- Navigation Buttons -->
+            <div class="slds-p-around_medium slds-border_top">
+                <div class="slds-grid slds-grid_align-spread">
+                    <div>
+                        <template if:true={showBackButton}>
+                            <lightning-button
+                                label="Back"
+                                variant="neutral"
+                                onclick={handleBack}
+                                icon-name="utility:chevronleft">
+                            </lightning-button>
+                        </template>
+                    </div>
+                    <div>
+                        <template if:true={showNextButton}>
+                            <lightning-button
+                                label={nextButtonLabel}
+                                variant="brand"
+                                onclick={handleNext}
+                                icon-name="utility:chevronright"
+                                icon-position="right"
+                                disabled={isNextDisabled}>
+                            </lightning-button>
+                        </template>
+                    </div>
+                </div>
+            </div>
+        </template>
+    </lightning-card>
+</template>

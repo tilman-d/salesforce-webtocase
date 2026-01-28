@@ -1,0 +1,28 @@
+:host {
+    display: block;
+}
+
+.slds-button_stretch {
+    width: 100%;
+}
+
+.slds-list_horizontal dt {
+    width: 80px;
+}
+
+.slds-list_horizontal dd {
+    flex: 1;
+}
+
+/* Ensure table doesn't overflow */
+.slds-table {
+    table-layout: fixed;
+}
+
+.slds-table td:first-child {
+    width: 60%;
+}
+
+.slds-table td:last-child {
+    width: 40%;
+}
