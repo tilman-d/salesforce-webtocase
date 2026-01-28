@@ -1,0 +1,52 @@
+/* Form Detail Styles */
+
+.field-item {
+    background-color: #f3f3f3;
+    border-radius: 0.25rem;
+}
+
+.field-header {
+    min-height: 2.5rem;
+}
+
+.field-toggle {
+    text-align: left;
+    width: 100%;
+    display: flex;
+    align-items: center;
+}
+
+.field-toggle:hover {
+    background-color: #e0e0e0;
+    border-radius: 0.25rem;
+}
+
+.field-details {
+    background-color: white;
+    margin: 0 -0.75rem -0.75rem;
+    padding: 0.75rem;
+    border-radius: 0 0 0.25rem 0.25rem;
+}
+
+/* Improve badge appearance */
+.slds-badge {
+    font-size: 0.7rem;
+    padding: 0.125rem 0.375rem;
+}
+
+.slds-badge_inverse {
+    background-color: #0176d3;
+    color: white;
+}
+
+/* Empty state */
+.slds-illustration {
+    background-color: #fafafa;
+    border-radius: 0.25rem;
+}
+
+/* Page header adjustments */
+.slds-page-header {
+    background-color: #fafafa;
+    border-radius: 0.25rem;
+}

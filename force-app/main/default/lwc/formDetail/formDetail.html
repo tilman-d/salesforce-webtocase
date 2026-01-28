@@ -1,0 +1,258 @@
+<template>
+    <!-- Loading Spinner -->
+    <template if:true={isLoading}>
+        <div class="slds-is-relative slds-p-around_large">
+            <lightning-spinner alternative-text="Loading" size="medium"></lightning-spinner>
+        </div>
+    </template>
+
+    <template if:false={isLoading}>
+        <div class="slds-p-around_medium">
+            <!-- Header -->
+            <div class="slds-page-header slds-m-bottom_medium">
+                <div class="slds-page-header__row">
+                    <div class="slds-page-header__col-title">
+                        <div class="slds-page-header__name">
+                            <div class="slds-page-header__name-title">
+                                <h1>
+                                    <span class="slds-page-header__title slds-truncate">{pageTitle}</span>
+                                </h1>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="slds-page-header__col-actions">
+                        <div class="slds-page-header__controls">
+                            <div class="slds-page-header__control">
+                                <lightning-button
+                                    label="Cancel"
+                                    onclick={handleCancel}>
+                                </lightning-button>
+                            </div>
+                            <div class="slds-page-header__control">
+                                <lightning-button
+                                    label="View Live"
+                                    icon-name="utility:new_window"
+                                    onclick={handleViewLive}
+                                    disabled={isNewForm}>
+                                </lightning-button>
+                            </div>
+                            <div class="slds-page-header__control">
+                                <lightning-button
+                                    label="Save"
+                                    variant="brand"
+                                    onclick={handleSave}
+                                    disabled={isSaving}>
+                                    <template if:true={isSaving}>
+                                        <lightning-spinner alternative-text="Saving" size="small" class="slds-m-left_x-small"></lightning-spinner>
+                                    </template>
+                                </lightning-button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Form Settings Section -->
+            <lightning-accordion allow-multiple-sections-open active-section-name={activeSections}>
+                <lightning-accordion-section name="settings" label="Form Settings">
+                    <div class="slds-grid slds-wrap slds-gutters">
+                        <div class="slds-col slds-size_1-of-1 slds-medium-size_1-of-2 slds-p-bottom_small">
+                            <lightning-input
+                                label="Form Name"
+                                value={form.formName}
+                                onchange={handleFormNameChange}
+                                required
+                                placeholder="my-form-name"
+                                field-level-help="URL-friendly identifier. Use lowercase letters, numbers, and hyphens only."
+                                message-when-value-missing="Form Name is required">
+                            </lightning-input>
+                            <template if:true={formNameError}>
+                                <div class="slds-text-color_error slds-text-body_small slds-m-top_xx-small">
+                                    {formNameError}
+                                </div>
+                            </template>
+                        </div>
+                        <div class="slds-col slds-size_1-of-1 slds-medium-size_1-of-2 slds-p-bottom_small">
+                            <lightning-input
+                                label="Title"
+                                value={form.title}
+                                onchange={handleTitleChange}
+                                required
+                                placeholder="Contact Us"
+                                message-when-value-missing="Title is required">
+                            </lightning-input>
+                        </div>
+                        <div class="slds-col slds-size_1-of-1 slds-p-bottom_small">
+                            <lightning-textarea
+                                label="Description"
+                                value={form.description}
+                                onchange={handleDescriptionChange}
+                                placeholder="Instructions or description shown at the top of the form">
+                            </lightning-textarea>
+                        </div>
+                        <div class="slds-col slds-size_1-of-1 slds-p-bottom_small">
+                            <lightning-textarea
+                                label="Success Message"
+                                value={form.successMessage}
+                                onchange={handleSuccessMessageChange}
+                                placeholder="Thank you for your submission!">
+                            </lightning-textarea>
+                        </div>
+                        <div class="slds-col slds-size_1-of-1 slds-medium-size_1-of-3 slds-p-bottom_small">
+                            <lightning-input
+                                type="checkbox"
+                                label="Active"
+                                checked={form.active}
+                                onchange={handleActiveChange}>
+                            </lightning-input>
+                        </div>
+                        <div class="slds-col slds-size_1-of-1 slds-medium-size_1-of-3 slds-p-bottom_small">
+                            <lightning-input
+                                type="checkbox"
+                                label="Enable File Upload"
+                                checked={form.enableFileUpload}
+                                onchange={handleFileUploadChange}>
+                            </lightning-input>
+                        </div>
+                        <div class="slds-col slds-size_1-of-1 slds-medium-size_1-of-3 slds-p-bottom_small">
+                            <lightning-input
+                                type="number"
+                                label="Max File Size (MB)"
+                                value={form.maxFileSizeMB}
+                                onchange={handleMaxFileSizeChange}
+                                min="1"
+                                max="25">
+                            </lightning-input>
+                        </div>
+                    </div>
+                </lightning-accordion-section>
+
+                <!-- Fields Section -->
+                <lightning-accordion-section name="fields" label="Form Fields">
+                    <div class="slds-m-bottom_small">
+                        <lightning-button
+                            label="Add Field"
+                            variant="neutral"
+                            icon-name="utility:add"
+                            onclick={handleAddField}>
+                        </lightning-button>
+                    </div>
+
+                    <template if:false={hasFields}>
+                        <div class="slds-illustration slds-illustration_small slds-p-around_medium slds-text-align_center">
+                            <p class="slds-text-body_regular">No fields yet. Click "Add Field" to create your first field.</p>
+                        </div>
+                    </template>
+
+                    <template if:true={hasFields}>
+                        <div class="field-list">
+                            <template for:each={fieldsWithIndex} for:item="field">
+                                <div key={field.tempId} class="field-item slds-box slds-m-bottom_small">
+                                    <!-- Field Header (always visible) -->
+                                    <div class="field-header slds-grid slds-grid_align-spread slds-grid_vertical-align-center">
+                                        <div class="slds-col slds-grow">
+                                            <button
+                                                type="button"
+                                                class="slds-button slds-button_reset field-toggle"
+                                                data-index={field.index}
+                                                onclick={handleToggleField}>
+                                                <lightning-icon
+                                                    icon-name={field.chevronIcon}
+                                                    size="x-small"
+                                                    class="slds-m-right_x-small">
+                                                </lightning-icon>
+                                                <span class="slds-text-body_regular">
+                                                    <strong>{field.displayIndex}.</strong>
+                                                    {field.fieldLabel}
+                                                    <template if:false={field.fieldLabel}>
+                                                        <em class="slds-text-color_weak">(New Field)</em>
+                                                    </template>
+                                                </span>
+                                                <span class="slds-badge slds-m-left_small">{field.fieldType}</span>
+                                                <template if:true={field.required}>
+                                                    <span class="slds-badge slds-badge_inverse slds-m-left_x-small">Required</span>
+                                                </template>
+                                            </button>
+                                        </div>
+                                        <div class="slds-col slds-no-flex">
+                                            <lightning-button-group>
+                                                <lightning-button-icon
+                                                    icon-name="utility:up"
+                                                    alternative-text="Move Up"
+                                                    data-index={field.index}
+                                                    onclick={handleMoveFieldUp}
+                                                    disabled={field.isFirst}>
+                                                </lightning-button-icon>
+                                                <lightning-button-icon
+                                                    icon-name="utility:down"
+                                                    alternative-text="Move Down"
+                                                    data-index={field.index}
+                                                    onclick={handleMoveFieldDown}
+                                                    disabled={field.isLast}>
+                                                </lightning-button-icon>
+                                                <lightning-button-icon
+                                                    icon-name="utility:delete"
+                                                    alternative-text="Delete"
+                                                    variant="destructive"
+                                                    data-index={field.index}
+                                                    onclick={handleDeleteField}>
+                                                </lightning-button-icon>
+                                            </lightning-button-group>
+                                        </div>
+                                    </div>
+
+                                    <!-- Field Details (expanded) -->
+                                    <template if:true={field.isExpanded}>
+                                        <div class="field-details slds-p-top_small slds-border_top slds-m-top_small">
+                                            <div class="slds-grid slds-wrap slds-gutters">
+                                                <div class="slds-col slds-size_1-of-1 slds-medium-size_1-of-2 slds-p-bottom_small">
+                                                    <lightning-input
+                                                        label="Field Label"
+                                                        value={field.fieldLabel}
+                                                        data-index={field.index}
+                                                        onchange={handleFieldLabelChange}
+                                                        required
+                                                        placeholder="Your Name">
+                                                    </lightning-input>
+                                                </div>
+                                                <div class="slds-col slds-size_1-of-1 slds-medium-size_1-of-2 slds-p-bottom_small">
+                                                    <lightning-combobox
+                                                        label="Field Type"
+                                                        value={field.fieldType}
+                                                        options={fieldTypeOptions}
+                                                        data-index={field.index}
+                                                        onchange={handleFieldTypeChange}
+                                                        required>
+                                                    </lightning-combobox>
+                                                </div>
+                                                <div class="slds-col slds-size_1-of-1 slds-medium-size_1-of-2 slds-p-bottom_small">
+                                                    <lightning-combobox
+                                                        label="Maps to Case Field"
+                                                        value={field.caseField}
+                                                        options={caseFieldOptions}
+                                                        data-index={field.index}
+                                                        onchange={handleCaseFieldChange}
+                                                        required>
+                                                    </lightning-combobox>
+                                                </div>
+                                                <div class="slds-col slds-size_1-of-1 slds-medium-size_1-of-2 slds-p-bottom_small slds-p-top_medium">
+                                                    <lightning-input
+                                                        type="checkbox"
+                                                        label="Required"
+                                                        checked={field.required}
+                                                        data-index={field.index}
+                                                        onchange={handleRequiredChange}>
+                                                    </lightning-input>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </template>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+                </lightning-accordion-section>
+            </lightning-accordion>
+        </div>
+    </template>
+</template>

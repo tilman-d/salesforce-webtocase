@@ -14,11 +14,20 @@ global without sharing class CaseFormController {
     // Form name from URL parameter
     public String formName { get; set; }
 
+    // Preview mode (bypasses Active check for admin testing)
+    public Boolean isPreviewMode { get; set; }
+
     /**
      * Constructor - loads form based on URL parameter
      */
     public CaseFormController() {
+        // Support both 'name' and 'form' parameters for backwards compatibility
         formName = ApexPages.currentPage().getParameters().get('name');
+        if (String.isBlank(formName)) {
+            formName = ApexPages.currentPage().getParameters().get('form');
+        }
+        // Check for preview mode
+        isPreviewMode = ApexPages.currentPage().getParameters().get('preview') == 'true';
         loadForm();
     }
 
@@ -31,14 +40,16 @@ global without sharing class CaseFormController {
         }
 
         try {
-            List<Form__c> forms = [
-                SELECT Id, Form_Name__c, Title__c, Description__c,
-                       Success_Message__c, Active__c, Enable_File_Upload__c,
-                       Max_File_Size_MB__c
-                FROM Form__c
-                WHERE Form_Name__c = :formName AND Active__c = true
-                LIMIT 1
-            ];
+            // In preview mode, allow inactive forms for admin testing
+            String query = 'SELECT Id, Form_Name__c, Title__c, Description__c, ' +
+                          'Success_Message__c, Active__c, Enable_File_Upload__c, ' +
+                          'Max_File_Size_MB__c FROM Form__c WHERE Form_Name__c = :formName';
+            if (!isPreviewMode) {
+                query += ' AND Active__c = true';
+            }
+            query += ' LIMIT 1';
+
+            List<Form__c> forms = Database.query(query);
 
             if (!forms.isEmpty()) {
                 form = forms[0];

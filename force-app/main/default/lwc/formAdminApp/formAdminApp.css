@@ -1,0 +1,59 @@
+/* Form Admin App Styles */
+
+/* Empty state styling */
+.slds-illustration {
+    padding: 2rem;
+}
+
+/* Modal backdrop */
+.modal-backdrop {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    background-color: rgba(0, 0, 0, 0.8);
+    z-index: 9000;
+}
+
+/* Modal container */
+.modal-container {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 9001;
+    background: white;
+    border-radius: 0.25rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    width: 90%;
+    max-width: 480px;
+}
+
+/* Modal header */
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    border-bottom: 1px solid #e5e5e5;
+}
+
+.modal-title {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #080707;
+    margin: 0;
+}
+
+/* Modal body */
+.modal-body {
+    padding: 1.5rem 1rem;
+}
+
+/* Modal footer */
+.modal-footer {
+    padding: 0.75rem 1rem;
+    border-top: 1px solid #e5e5e5;
+    text-align: right;
+}

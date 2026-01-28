@@ -1,0 +1,96 @@
+<template>
+    <lightning-card title="Form Manager" icon-name="custom:custom24">
+        <!-- Loading Spinner -->
+        <template if:true={isLoading}>
+            <div class="slds-is-relative slds-p-around_large">
+                <lightning-spinner alternative-text="Loading" size="medium"></lightning-spinner>
+            </div>
+        </template>
+
+        <!-- List View -->
+        <template if:true={isListView}>
+            <div slot="actions">
+                <lightning-button
+                    label="New Form"
+                    variant="brand"
+                    icon-name="utility:add"
+                    onclick={handleNewForm}>
+                </lightning-button>
+            </div>
+
+            <template if:true={hasForms}>
+                <lightning-datatable
+                    key-field="id"
+                    data={forms}
+                    columns={columns}
+                    onrowaction={handleRowAction}
+                    hide-checkbox-column>
+                </lightning-datatable>
+            </template>
+
+            <template if:false={hasForms}>
+                <template if:false={isLoading}>
+                    <div class="slds-p-around_large slds-text-align_center">
+                        <div class="slds-illustration slds-illustration_small">
+                            <lightning-icon
+                                icon-name="utility:form"
+                                size="large"
+                                class="slds-m-bottom_medium">
+                            </lightning-icon>
+                            <h3 class="slds-text-heading_medium slds-m-bottom_small">No Forms Yet</h3>
+                            <p class="slds-text-body_regular slds-m-bottom_medium">
+                                Create your first form to get started.
+                            </p>
+                            <lightning-button
+                                label="Create Form"
+                                variant="brand"
+                                icon-name="utility:add"
+                                onclick={handleNewForm}>
+                            </lightning-button>
+                        </div>
+                    </div>
+                </template>
+            </template>
+        </template>
+
+        <!-- Edit View -->
+        <template if:true={isEditView}>
+            <c-form-detail
+                form-id={selectedFormId}
+                onformsaved={handleFormSaved}
+                onformcancelled={handleFormCancelled}>
+            </c-form-detail>
+        </template>
+    </lightning-card>
+
+    <!-- Delete Confirmation Modal -->
+    <template if:true={showDeleteModal}>
+        <div style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:9000" onclick={handleCloseDeleteModal}></div>
+        <div style="position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9001;background:#fff;border-radius:0.5rem;box-shadow:0 4px 14px rgba(0,0,0,0.25);width:400px;max-width:90%">
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:0.75rem 1rem;border-bottom:1px solid #e5e5e5">
+                <h2 style="margin:0;font-size:1.125rem;font-weight:700">Delete Form</h2>
+                <lightning-button-icon
+                    icon-name="utility:close"
+                    alternative-text="Close"
+                    variant="bare"
+                    onclick={handleCloseDeleteModal}>
+                </lightning-button-icon>
+            </div>
+            <div style="padding:1.25rem 1rem">
+                <p style="margin:0">{deleteModalMessage}</p>
+            </div>
+            <div style="padding:0.75rem 1rem;border-top:1px solid #e5e5e5;text-align:right">
+                <lightning-button
+                    label="Cancel"
+                    onclick={handleCloseDeleteModal}>
+                </lightning-button>
+                <lightning-button
+                    label="Delete"
+                    variant="destructive"
+                    onclick={handleConfirmDelete}
+                    class="slds-m-left_x-small">
+                </lightning-button>
+            </div>
+        </div>
+    </template>
+</template>
