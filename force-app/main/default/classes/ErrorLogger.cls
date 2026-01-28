@@ -10,12 +10,23 @@ public class ErrorLogger {
      * @param stackTrace Apex stack trace
      * @param formId ID of the form that had the error
      */
+    private static final Integer MAX_MESSAGE_LENGTH = 32768;
+    private static final Integer MAX_STACK_TRACE_LENGTH = 32768;
+
     public static void log(String message, String stackTrace, String formId) {
         try {
+            // Truncate to field limits
+            String truncatedMessage = message != null && message.length() > MAX_MESSAGE_LENGTH
+                ? message.substring(0, MAX_MESSAGE_LENGTH)
+                : message;
+            String truncatedStack = stackTrace != null && stackTrace.length() > MAX_STACK_TRACE_LENGTH
+                ? stackTrace.substring(0, MAX_STACK_TRACE_LENGTH)
+                : stackTrace;
+
             Error_Log__c errorLog = new Error_Log__c(
                 Timestamp__c = DateTime.now(),
-                Error_Message__c = message,
-                Stack_Trace__c = stackTrace,
+                Error_Message__c = truncatedMessage,
+                Stack_Trace__c = truncatedStack,
                 Form_Id__c = formId
             );
             insert errorLog;
