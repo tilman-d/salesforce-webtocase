@@ -1,0 +1,112 @@
+<apex:page controller="CaseFormController" showHeader="false" sidebar="false"
+           standardStylesheets="false" docType="html-5.0" applyBodyTag="false"
+           cache="false" lightningStylesheets="false">
+
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8"/>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+        <title>{!IF(form != null, form.Title__c, 'Form')}</title>
+        <apex:stylesheet value="{!$Resource.caseFormStyles}"/>
+    </head>
+    <body>
+        <div class="form-container">
+            <!-- Form Found and Active -->
+            <apex:outputPanel rendered="{!form != null}">
+                <h1>{!form.Title__c}</h1>
+                <apex:outputPanel rendered="{!NOT(ISBLANK(form.Description__c))}">
+                    <p class="description">{!form.Description__c}</p>
+                </apex:outputPanel>
+
+                <form id="caseForm" class="case-form">
+                    <apex:repeat value="{!fields}" var="field">
+                        <div class="form-field">
+                            <label for="field_{!field.Id}">
+                                {!field.Field_Label__c}
+                                <apex:outputPanel rendered="{!field.Required__c}">
+                                    <span class="required">*</span>
+                                </apex:outputPanel>
+                            </label>
+
+                            <!-- Text and Email inputs -->
+                            <apex:outputPanel rendered="{!OR(field.Field_Type__c == 'Text', field.Field_Type__c == 'Email', field.Field_Type__c == 'Phone')}">
+                                <input type="{!IF(field.Field_Type__c == 'Email', 'email', IF(field.Field_Type__c == 'Phone', 'tel', 'text'))}"
+                                       id="field_{!field.Id}"
+                                       name="{!field.Case_Field__c}"
+                                       data-required="{!field.Required__c}"
+                                       data-label="{!field.Field_Label__c}"
+                                       class="form-input"
+                                       autocomplete="off"/>
+                            </apex:outputPanel>
+
+                            <!-- Textarea -->
+                            <apex:outputPanel rendered="{!field.Field_Type__c == 'Textarea'}">
+                                <textarea id="field_{!field.Id}"
+                                          name="{!field.Case_Field__c}"
+                                          data-required="{!field.Required__c}"
+                                          data-label="{!field.Field_Label__c}"
+                                          class="form-input"
+                                          rows="5"></textarea>
+                            </apex:outputPanel>
+                        </div>
+                    </apex:repeat>
+
+                    <!-- File Upload -->
+                    <apex:outputPanel rendered="{!form.Enable_File_Upload__c}">
+                        <div class="form-field">
+                            <label for="fileInput">Attachment (Optional)</label>
+                            <input type="file" id="fileInput" class="form-input file-input"/>
+                            <p class="help-text">
+                                Max file size: {!IF(form.Max_File_Size_MB__c != null, form.Max_File_Size_MB__c, 10)} MB
+                            </p>
+                        </div>
+                    </apex:outputPanel>
+
+                    <!-- Error Message -->
+                    <div id="errorMessage" class="error-message" style="display:none;"></div>
+
+                    <!-- Submit Button -->
+                    <button type="submit" id="submitButton" class="submit-button">
+                        Submit
+                    </button>
+                </form>
+
+                <!-- Success Message -->
+                <div id="successMessage" class="success-message" style="display:none;">
+                    <apex:outputPanel rendered="{!NOT(ISBLANK(form.Success_Message__c))}">
+                        {!form.Success_Message__c}
+                    </apex:outputPanel>
+                    <apex:outputPanel rendered="{!ISBLANK(form.Success_Message__c)}">
+                        Thank you! Your request has been submitted successfully.
+                    </apex:outputPanel>
+                    <p class="case-number">Your case number: <span id="caseNumberDisplay"></span></p>
+                </div>
+            </apex:outputPanel>
+
+            <!-- Form Not Found -->
+            <apex:outputPanel rendered="{!form == null}">
+                <div class="error-container">
+                    <h1>Form Not Available</h1>
+                    <p class="error-message" style="display:block;">
+                        The requested form is not available or is inactive.
+                    </p>
+                </div>
+            </apex:outputPanel>
+        </div>
+
+        <!-- JavaScript Configuration and Script -->
+        <apex:outputPanel rendered="{!form != null}">
+            <script type="text/javascript">
+                // Form configuration
+                var formConfig = {
+                    formId: '{!JSENCODE(form.Id)}',
+                    maxFileSize: {!IF(form.Max_File_Size_MB__c != null, form.Max_File_Size_MB__c, 10)} * 1024 * 1024,
+                    enableFileUpload: {!form.Enable_File_Upload__c},
+                    remoteAction: '{!$RemoteAction.CaseFormController.submitForm}'
+                };
+            </script>
+            <apex:includeScript value="{!$Resource.caseFormScript}"/>
+        </apex:outputPanel>
+    </body>
+    </html>
+</apex:page>
