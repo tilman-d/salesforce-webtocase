@@ -19,8 +19,9 @@ Salesforce's native Web-to-Case doesn't support file attachments. This app solve
 |-------|-------------|--------|
 | **Phase 0** | MVP - Core form submission | ✅ Complete |
 | **Phase 1** | Admin UI (LWC form builder) | ✅ Complete |
-| **Phase 2** | reCAPTCHA integration | ⬜ Not started |
-| **Phase 3** | Embeddable widget, multi-file upload | ⬜ Not started |
+| **Phase 2** | Post-Install Setup Wizard | 🔜 **Next up** |
+| **Phase 3** | reCAPTCHA integration | ⬜ Not started |
+| **Phase 4** | Embeddable widget, multi-file upload | ⬜ Not started |
 
 ---
 
@@ -170,13 +171,49 @@ Access: `https://[your-domain].my.salesforce-sites.com/support/CaseFormPage?name
 
 ## Roadmap
 
-### Phase 2: reCAPTCHA
-- Google reCAPTCHA v2 integration
-- Per-form toggle
-- Protected custom settings for API keys
+### Phase 2: Post-Install Setup Wizard (NEXT)
 
-### Phase 3: Advanced Features
-- Embeddable JavaScript widget
+**Problem:** Current setup requires 10+ manual steps across multiple Setup screens. Guest User permissions are complex and error-prone. Most admins would give up or misconfigure.
+
+**Solution:** An LWC-based 5-step setup wizard.
+
+**Technical Research Complete:**
+| Configuration | Can Automate | Method |
+|--------------|--------------|--------|
+| Detect existing Sites | ✅ Yes | SOQL on Site object |
+| Create new Site | ❌ No | Manual (Metadata API too complex) |
+| Object Permissions | ✅ Yes | ObjectPermissions via Profile's PermissionSet |
+| Field Permissions | ✅ Yes | FieldPermissions via Profile's PermissionSet |
+| Apex Class Access | ❌ No | Manual (cannot set on Guest Profile programmatically) |
+| VF Page Access | ❌ No | Manual (cannot set on Guest Profile programmatically) |
+| Create sample form | ✅ Yes | Standard DML |
+
+**Key insight:** Guest User Profiles have a linked PermissionSet record. We can modify ObjectPermissions and FieldPermissions on that PermissionSet to configure the Guest User.
+
+**Wizard Flow (5 Steps):**
+1. **Welcome & Preconditions** - Check My Domain, admin permissions, Sites enabled
+2. **Select Site** - Choose from existing Sites or guide manual creation
+3. **Auto-Configure** - Set object/field permissions with security warning
+4. **Manual Steps** - Instructions for Apex/VF access with validation
+5. **Complete** - Show public URL, test link, create sample form
+
+**Files to create:**
+- `SetupWizardController.cls` - Site detection, permission config, validation
+- `SetupWizardControllerTest.cls` - Unit tests
+- `setupWizard/` LWC - Multi-step wizard UI
+- `Setup_Wizard.flexipage-meta.xml` - Lightning page
+- `Setup_Wizard.tab-meta.xml` - Navigation tab
+
+**Detailed plan:** See `/root/.claude/plans/parsed-chasing-grove.md`
+
+### Phase 3: reCAPTCHA
+- Google reCAPTCHA v2 integration
+- Per-form toggle (Enable_Captcha__c field on Form__c)
+- Protected custom settings for API keys (site key + secret key)
+- Server-side verification in CaseFormController.submitForm()
+
+### Phase 4: Advanced Features
+- Embeddable JavaScript widget (for non-Salesforce sites)
 - Multi-file upload
 - Custom field types (picklist, date)
 - Form analytics/submission tracking
@@ -259,3 +296,62 @@ force-app/main/default/
 - CaseFormPage Visualforce page
 - Basic styling and client-side validation
 - Error logging utility
+
+---
+
+## Next Session Starting Point
+
+**Status:** Phase 0 and Phase 1 complete. **Phase 2 planning complete.** Ready to implement.
+
+**Detailed plan location:** `/root/.claude/plans/parsed-chasing-grove.md`
+
+---
+
+### Phase 2 Implementation Summary
+
+**Research completed.** Key findings:
+- Sites can be queried via SOQL but not created (need manual creation)
+- Object/Field permissions CAN be set programmatically via ObjectPermissions/FieldPermissions
+- Apex/VF access CANNOT be set programmatically on Guest Profile (must be manual with validation)
+
+**Implementation order:**
+
+1. **Apex Controller** (`SetupWizardController.cls`)
+   ```
+   Methods to implement:
+   - checkPreconditions() - My Domain, admin perms, Sites enabled
+   - getActiveSites() - SOQL on Site object
+   - getSetupStatus(siteId) - Check current permission status
+   - configurePermissions(siteId) - Set ObjectPermissions/FieldPermissions (idempotent)
+   - validateConfiguration(siteId) - Check all perms including Apex/VF access
+   - createSampleForm() - Create "Contact Support" form
+   - getPublicUrl(siteId, formName) - Derive URL from Site object
+   - getConfigSummary(siteId) - For diagnostics download
+   ```
+
+2. **Test Class** (`SetupWizardControllerTest.cls`)
+   - Target 90%+ coverage
+   - Test precondition checks, permission config, validation
+
+3. **LWC Wizard** (`setupWizard/`)
+   - 5-step progress indicator
+   - Step 1: Precondition checks with pass/fail display
+   - Step 2: Site selection with radio buttons, refresh button
+   - Step 3: Security warning + auto-config with retry capability
+   - Step 4: Manual instructions + validation button
+   - Step 5: URL display, test link, sample form creation, diagnostics download
+
+4. **Metadata**
+   - `Setup_Wizard.flexipage-meta.xml`
+   - `Setup_Wizard.tab-meta.xml`
+   - Update permission set
+
+**Key technical notes:**
+- Use `with sharing` on all controllers
+- Make permission config idempotent (safe to retry)
+- Log errors to Error_Log__c
+- Derive URLs dynamically from Site object (works with Enhanced Domains)
+
+**Dev org:** `tilman.dietrich@gmail.com.dev` (alias: `devorg`)
+
+**GitHub:** https://github.com/tilman-d/salesforce-webtocase
