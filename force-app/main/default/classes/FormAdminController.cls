@@ -16,6 +16,7 @@ public with sharing class FormAdminController {
         @AuraEnabled public Boolean enableFileUpload;
         @AuraEnabled public Decimal maxFileSizeMB;
         @AuraEnabled public String successMessage;
+        @AuraEnabled public Boolean enableCaptcha;
         @AuraEnabled public Integer fieldCount;
         @AuraEnabled public List<FieldWrapper> fields;
 
@@ -24,6 +25,7 @@ public with sharing class FormAdminController {
             this.active = false;
             this.enableFileUpload = false;
             this.maxFileSizeMB = 10;
+            this.enableCaptcha = false;
             this.fieldCount = 0;
         }
 
@@ -36,6 +38,7 @@ public with sharing class FormAdminController {
             this.enableFileUpload = form.Enable_File_Upload__c;
             this.maxFileSizeMB = form.Max_File_Size_MB__c;
             this.successMessage = form.Success_Message__c;
+            this.enableCaptcha = form.Enable_Captcha__c;
             this.fieldCount = fieldCount;
             this.fields = new List<FieldWrapper>();
         }
@@ -122,7 +125,7 @@ public with sharing class FormAdminController {
         // Query all forms
         for (Form__c form : [
             SELECT Id, Form_Name__c, Title__c, Description__c, Active__c,
-                   Enable_File_Upload__c, Max_File_Size_MB__c, Success_Message__c
+                   Enable_File_Upload__c, Max_File_Size_MB__c, Success_Message__c, Enable_Captcha__c
             FROM Form__c
             ORDER BY CreatedDate DESC
         ]) {
@@ -144,7 +147,7 @@ public with sharing class FormAdminController {
 
         List<Form__c> forms = [
             SELECT Id, Form_Name__c, Title__c, Description__c, Active__c,
-                   Enable_File_Upload__c, Max_File_Size_MB__c, Success_Message__c
+                   Enable_File_Upload__c, Max_File_Size_MB__c, Success_Message__c, Enable_Captcha__c
             FROM Form__c
             WHERE Id = :formId
             LIMIT 1
@@ -190,6 +193,7 @@ public with sharing class FormAdminController {
         Boolean enableFileUpload = (Boolean)formData.get('enableFileUpload');
         Decimal maxFileSizeMB = formData.get('maxFileSizeMB') != null ? Decimal.valueOf(String.valueOf(formData.get('maxFileSizeMB'))) : 10;
         String successMessage = (String)formData.get('successMessage');
+        Boolean enableCaptcha = (Boolean)formData.get('enableCaptcha');
 
         // Validate required fields
         if (String.isBlank(formName)) {
@@ -225,6 +229,7 @@ public with sharing class FormAdminController {
         form.Enable_File_Upload__c = enableFileUpload == true;
         form.Max_File_Size_MB__c = maxFileSizeMB;
         form.Success_Message__c = successMessage;
+        form.Enable_Captcha__c = enableCaptcha == true;
 
         try {
             upsert form;

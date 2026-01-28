@@ -9,6 +9,7 @@ Salesforce's native Web-to-Case doesn't support file attachments. This app solve
 - Public Visualforce page for form rendering
 - File attachments via ContentVersion/ContentDocumentLink
 - LWC Admin UI for managing forms without using Setup
+- Google reCAPTCHA v2 for spam protection
 - Error logging for debugging
 
 ---
@@ -20,8 +21,8 @@ Salesforce's native Web-to-Case doesn't support file attachments. This app solve
 | **Phase 0** | MVP - Core form submission | ✅ Complete |
 | **Phase 1** | Admin UI (LWC form builder) | ✅ Complete |
 | **Phase 2** | Post-Install Setup Wizard | ✅ Complete |
-| **Phase 3** | reCAPTCHA integration | 🔜 **Next up** |
-| **Phase 4** | Embeddable widget, multi-file upload | ⬜ Not started |
+| **Phase 3** | reCAPTCHA integration | ✅ Complete |
+| **Phase 4** | Embeddable widget, multi-file upload | 🔜 **Next up** |
 
 ---
 
@@ -119,6 +120,120 @@ Access via the **Setup Wizard** tab or the **Web-to-Case Forms** app in the App 
 
 ---
 
+## What's Built (Phase 3)
+
+### Google reCAPTCHA v2 Integration
+Protects public forms from spam and bot submissions with "I'm not a robot" checkbox verification.
+
+**Features:**
+- Per-form CAPTCHA toggle (`Enable_Captcha__c` field on Form__c)
+- Protected Custom Setting for API keys (`reCAPTCHA_Settings__c`)
+- Client-side reCAPTCHA widget rendering
+- Server-side token verification via Google API
+- Graceful error handling with user-friendly messages
+- Admin UI toggle in Form Manager
+
+### Custom Setting
+- **reCAPTCHA_Settings__c** - Protected hierarchy Custom Setting
+  - `Site_Key__c` - Public key for widget rendering
+  - `Secret_Key__c` - Private key for server-side verification
+
+### Form__c Field
+- **Enable_Captcha__c** - Checkbox to enable/disable CAPTCHA per form
+
+### Remote Site Setting
+- **Google_reCAPTCHA** - Allows callouts to `https://www.google.com` for token verification
+
+### Updated Components
+- **CaseFormController.cls** - Added `verifyCaptcha()` method, `getCaptchaSiteKey()`, `getCaptchaEnabled()`
+- **CaseFormPage.page** - Conditionally loads reCAPTCHA script and renders widget
+- **caseFormScript.js** - Handles CAPTCHA token extraction and submission
+- **caseFormStyles.css** - Styling for CAPTCHA widget and error messages
+- **formDetail LWC** - Added "Enable CAPTCHA" toggle in form settings
+
+### Permission Set Updates
+- Added `Enable_Captcha__c` field permission (Read/Edit)
+
+### Test Coverage
+- **CaseFormControllerTest** - 22 tests including 9 CAPTCHA-specific tests with HTTP mocks
+- 88% code coverage on CaseFormController
+
+---
+
+## Manual Testing Checklist (Phase 3)
+
+Use this checklist to verify reCAPTCHA integration in your org:
+
+### 1. Configure reCAPTCHA API Keys
+
+- [ ] Go to [Google reCAPTCHA Admin Console](https://www.google.com/recaptcha/admin)
+- [ ] Create a new site with reCAPTCHA v2 "I'm not a robot" checkbox
+- [ ] Add your Salesforce Site domain (e.g., `yourorg.my.salesforce-sites.com`)
+- [ ] Copy the **Site Key** and **Secret Key**
+
+### 2. Add Keys to Salesforce
+
+- [ ] In Salesforce, go to **Setup** → **Custom Settings**
+- [ ] Find **reCAPTCHA Settings** and click **Manage**
+- [ ] Click **New** (at org level)
+- [ ] Enter your **Site Key** and **Secret Key**
+- [ ] Click **Save**
+
+### 3. Create a Test Form with CAPTCHA
+
+- [ ] Go to **Form Manager** tab
+- [ ] Click **New Form** or edit an existing form
+- [ ] Check the **Enable CAPTCHA** checkbox
+- [ ] Add at least one required field (e.g., Name, Email, Subject)
+- [ ] Check **Active**
+- [ ] Click **Save**
+
+### 4. Test the Public Form
+
+- [ ] Click **View Live** to open the form in a new tab
+- [ ] Verify the reCAPTCHA widget ("I'm not a robot") appears below the form fields
+- [ ] **Test 1: Submit without CAPTCHA**
+  - [ ] Fill in all required fields
+  - [ ] Do NOT click the CAPTCHA checkbox
+  - [ ] Click Submit
+  - [ ] Verify error message: "Please complete the CAPTCHA verification."
+- [ ] **Test 2: Submit with CAPTCHA**
+  - [ ] Fill in all required fields
+  - [ ] Click the reCAPTCHA checkbox (wait for green checkmark)
+  - [ ] Click Submit
+  - [ ] Verify success message with case number
+
+### 5. Verify Case Creation
+
+- [ ] Go to **Cases** tab in Salesforce
+- [ ] Find the newly created case
+- [ ] Verify the case fields match your form submission
+
+### 6. Test Form WITHOUT CAPTCHA
+
+- [ ] Create or edit a form with **Enable CAPTCHA** unchecked
+- [ ] View the form publicly
+- [ ] Verify NO reCAPTCHA widget appears
+- [ ] Submit the form and verify it works without CAPTCHA
+
+### 7. Test Admin UI
+
+- [ ] Go to **Form Manager** tab
+- [ ] Verify the **Enable CAPTCHA** checkbox appears in form settings
+- [ ] Verify the help text explains reCAPTCHA requirements
+- [ ] Toggle CAPTCHA on/off and save - verify it persists
+
+### Troubleshooting
+
+| Issue | Solution |
+|-------|----------|
+| reCAPTCHA widget doesn't appear | Check that `reCAPTCHA_Settings__c` has Site Key configured |
+| "CAPTCHA verification failed" on submit | Verify Secret Key is correct in Custom Settings |
+| Form hangs on submit | Check browser console for errors; verify Remote Site Setting exists |
+| Error: "Unauthorized endpoint" | Add Remote Site Setting for `https://www.google.com` |
+
+---
+
 ## Deployment
 
 ### Prerequisites
@@ -142,7 +257,8 @@ Form__c form = new Form__c(
     Success_Message__c = 'Thank you! Your case has been submitted.',
     Active__c = true,
     Enable_File_Upload__c = true,
-    Max_File_Size_MB__c = 10
+    Max_File_Size_MB__c = 10,
+    Enable_Captcha__c = true  // Enable CAPTCHA
 );
 insert form;
 
@@ -178,7 +294,7 @@ On the Site detail page → Public Access Settings:
 | ContentDocumentLink | | ✓ |
 | Error_Log__c | | ✓ |
 
-**Field Permissions (Form__c):** Read access to Description__c, Enable_File_Upload__c, Max_File_Size_MB__c, Success_Message__c
+**Field Permissions (Form__c):** Read access to Description__c, Enable_File_Upload__c, Max_File_Size_MB__c, Success_Message__c, Enable_Captcha__c
 
 **Field Permissions (Form_Field__c):** Read access to Required__c
 
@@ -186,7 +302,12 @@ On the Site detail page → Public Access Settings:
 
 **VF Page Access:** CaseFormPage
 
-### 5. Test
+### 5. Configure reCAPTCHA (Phase 3)
+1. Get API keys from [Google reCAPTCHA Admin](https://www.google.com/recaptcha/admin)
+2. Setup → Custom Settings → reCAPTCHA Settings → Manage → New
+3. Enter Site Key and Secret Key
+
+### 6. Test
 Access: `https://[your-domain].my.salesforce-sites.com/support/CaseFormPage?name=support`
 
 ---
@@ -202,6 +323,7 @@ Access: `https://[your-domain].my.salesforce-sites.com/support/CaseFormPage?name
    - **Success Message**: Shown after submission
    - **Active**: Toggle to enable/disable the form
    - **Enable File Upload**: Allow file attachments
+   - **Enable CAPTCHA**: Require reCAPTCHA verification (Phase 3)
 4. Add fields in the **Form Fields** section
 5. Click **Save**
 6. Use **View Live** to preview the form
@@ -210,38 +332,7 @@ Access: `https://[your-domain].my.salesforce-sites.com/support/CaseFormPage?name
 
 ## Roadmap
 
-### Phase 3: reCAPTCHA Integration (NEXT)
-
-**Problem:** Public forms are vulnerable to spam and bot submissions. Without CAPTCHA protection, orgs may receive large volumes of junk cases.
-
-**Solution:** Google reCAPTCHA v2 integration with per-form toggle.
-
-**Planned Features:**
-- Google reCAPTCHA v2 ("I'm not a robot" checkbox)
-- Per-form toggle (`Enable_Captcha__c` field on Form__c)
-- Protected Custom Settings for API keys (Site Key + Secret Key)
-- Server-side verification in `CaseFormController.submitForm()`
-- Admin UI in Form Manager for enabling/disabling per form
-- Setup Wizard step for configuring reCAPTCHA keys
-
-**Technical Approach:**
-1. Add `Enable_Captcha__c` checkbox field to Form__c
-2. Create `reCAPTCHA_Settings__c` Custom Setting (protected, hierarchy)
-3. Add reCAPTCHA JavaScript to CaseFormPage
-4. Modify CaseFormController to verify token server-side via Google API
-5. Update Form Manager UI to show captcha toggle
-6. Add reCAPTCHA key configuration to Setup Wizard
-
-**Files to create/modify:**
-- `reCAPTCHA_Settings__c.object-meta.xml` - Custom Setting for API keys
-- `Form__c.Enable_Captcha__c.field-meta.xml` - New field
-- `CaseFormController.cls` - Add server-side verification
-- `caseFormScript.js` - Add reCAPTCHA widget integration
-- `CaseFormPage.page` - Include reCAPTCHA script
-- `formDetail` LWC - Add captcha toggle
-- `setupWizard` LWC - Add reCAPTCHA configuration step (optional)
-
-### Phase 4: Advanced Features
+### Phase 4: Advanced Features (NEXT)
 - Embeddable JavaScript widget (for non-Salesforce sites)
 - Multi-file upload
 - Custom field types (picklist, date)
@@ -256,9 +347,15 @@ force-app/main/default/
 ├── applications/
 │   └── Web_to_Case_Forms.app-meta.xml   # Phase 2 - Lightning App
 ├── objects/
-│   ├── Form__c/              # Form configuration
-│   ├── Form_Field__c/        # Field definitions
-│   └── Error_Log__c/         # Error logging
+│   ├── Form__c/                         # Form configuration
+│   │   └── fields/
+│   │       └── Enable_Captcha__c        # Phase 3
+│   ├── Form_Field__c/                   # Field definitions
+│   ├── Error_Log__c/                    # Error logging
+│   └── reCAPTCHA_Settings__c/           # Phase 3 - API keys
+│       └── fields/
+│           ├── Site_Key__c
+│           └── Secret_Key__c
 ├── classes/
 │   ├── CaseFormController.cls
 │   ├── CaseFormControllerTest.cls
@@ -269,9 +366,9 @@ force-app/main/default/
 │   ├── SetupWizardController.cls        # Phase 2
 │   └── SetupWizardControllerTest.cls    # Phase 2
 ├── lwc/
-│   ├── formAdminApp/         # Phase 1 - Main admin container
-│   ├── formDetail/           # Phase 1 - Form editor
-│   └── setupWizard/          # Phase 2 - Setup wizard
+│   ├── formAdminApp/                    # Phase 1 - Main admin container
+│   ├── formDetail/                      # Phase 1 - Form editor (+ CAPTCHA toggle)
+│   └── setupWizard/                     # Phase 2 - Setup wizard
 ├── flexipages/
 │   ├── Form_Manager.flexipage-meta.xml  # Phase 1
 │   └── Setup_Wizard.flexipage-meta.xml  # Phase 2
@@ -279,10 +376,12 @@ force-app/main/default/
 │   ├── Form_Manager.tab-meta.xml        # Phase 1
 │   └── Setup_Wizard.tab-meta.xml        # Phase 2
 ├── pages/
-│   └── CaseFormPage.page
+│   └── CaseFormPage.page                # + reCAPTCHA widget (Phase 3)
 ├── staticresources/
-│   ├── caseFormStyles.css
-│   └── caseFormScript.js
+│   ├── caseFormStyles.css               # + CAPTCHA styles (Phase 3)
+│   └── caseFormScript.js                # + CAPTCHA handling (Phase 3)
+├── remoteSiteSettings/
+│   └── Google_reCAPTCHA.remoteSite-meta.xml  # Phase 3
 └── permissionsets/
     └── Web_to_Case_Admin.permissionset-meta.xml
 ```
@@ -310,9 +409,30 @@ force-app/main/default/
 - Assign the **Web_to_Case_Admin** permission set to your user
 - Verify Form_Manager tab is set to Visible in the permission set
 
+### reCAPTCHA not showing (Phase 3)
+- Verify `Enable_Captcha__c = true` on the Form__c record
+- Check that `reCAPTCHA_Settings__c` has a valid Site Key
+- Guest User needs Read access to `Enable_Captcha__c` field
+
+### CAPTCHA verification fails (Phase 3)
+- Verify Secret Key is correct in `reCAPTCHA_Settings__c`
+- Check Remote Site Setting `Google_reCAPTCHA` is active
+- Review Error_Log__c for detailed error messages
+
 ---
 
 ## Changelog
+
+### v0.4.0 (2026-01-28) - Phase 3: reCAPTCHA Integration
+- Google reCAPTCHA v2 "I'm not a robot" checkbox integration
+- Per-form CAPTCHA toggle (`Enable_Captcha__c` field)
+- `reCAPTCHA_Settings__c` protected Custom Setting for API keys
+- Server-side token verification via Google API
+- Client-side CAPTCHA widget with error handling
+- Admin UI "Enable CAPTCHA" toggle in Form Manager
+- Remote Site Setting for Google API callouts
+- 9 new unit tests for CAPTCHA scenarios (22 total in CaseFormControllerTest)
+- 88% code coverage on CaseFormController
 
 ### v0.3.0 (2026-01-28) - Phase 2: Setup Wizard
 - 5-step post-install setup wizard
@@ -349,7 +469,7 @@ force-app/main/default/
 
 ## Next Session Starting Point
 
-**Status:** Phase 0, Phase 1, and Phase 2 complete. **Ready for Phase 3: reCAPTCHA Integration.**
+**Status:** Phases 0-3 complete. **Ready for Phase 4: Advanced Features.**
 
 **Dev org:** `tilman.dietrich@gmail.com.dev` (alias: `devorg`)
 
@@ -357,42 +477,25 @@ force-app/main/default/
 
 ---
 
-### Phase 3 Implementation Summary
+### Phase 4 Implementation Ideas
 
-**Goal:** Add Google reCAPTCHA v2 to prevent spam/bot submissions on public forms.
+**Embeddable JavaScript Widget:**
+- Generate embeddable `<script>` tag for external websites
+- Cross-domain form submission via postMessage or CORS
+- Customizable styling via CSS variables
 
-**Implementation order:**
+**Multi-file Upload:**
+- Allow multiple file attachments per submission
+- Drag-and-drop file upload UI
+- File type and size validation per file
 
-1. **Custom Setting** (`reCAPTCHA_Settings__c`)
-   - Protected hierarchy Custom Setting
-   - Fields: Site_Key__c, Secret_Key__c
-   - Allows different keys per org/profile if needed
+**Custom Field Types:**
+- Picklist fields with configurable options
+- Date picker fields
+- Checkbox fields
+- Phone number formatting
 
-2. **Form__c Field** (`Enable_Captcha__c`)
-   - Checkbox field to toggle reCAPTCHA per form
-   - Default: false (opt-in)
-
-3. **Frontend Integration**
-   - Add Google reCAPTCHA script to CaseFormPage
-   - Render widget when form has captcha enabled
-   - Pass token with form submission
-
-4. **Backend Verification**
-   - Modify CaseFormController.submitForm()
-   - Verify reCAPTCHA token via Google API (HTTP callout)
-   - Reject submission if verification fails
-   - Add Remote Site Setting for google.com
-
-5. **Admin UI Updates**
-   - Add captcha toggle to formDetail LWC
-   - Add Field Permission for Enable_Captcha__c
-
-6. **Setup Wizard Updates** (optional)
-   - Add step for configuring reCAPTCHA keys
-   - Or separate admin page for key management
-
-**Key technical notes:**
-- Use Named Credential or Remote Site Setting for Google API
-- Store Secret Key securely (Custom Setting, not exposed to client)
-- Handle verification timeout gracefully
-- Consider rate limiting on verification failures
+**Form Analytics:**
+- Track form views, submissions, abandonment
+- Success/error rate metrics
+- Time-to-submit analytics

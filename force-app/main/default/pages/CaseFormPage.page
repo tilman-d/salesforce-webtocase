@@ -8,6 +8,10 @@
         <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
         <title>{!IF(form != null, form.Title__c, 'Form')}</title>
         <apex:stylesheet value="{!$Resource.caseFormStyles}"/>
+        <!-- Google reCAPTCHA Script - only load when captcha is enabled -->
+        <apex:outputPanel rendered="{!captchaEnabled}">
+            <script src="https://www.google.com/recaptcha/api.js" async="true" defer="true"></script>
+        </apex:outputPanel>
     </head>
     <body>
         <div class="form-container">
@@ -62,6 +66,14 @@
                         </div>
                     </apex:outputPanel>
 
+                    <!-- reCAPTCHA Widget -->
+                    <apex:outputPanel rendered="{!captchaEnabled}">
+                        <div class="form-field captcha-field">
+                            <div id="recaptcha-container" class="g-recaptcha" data-sitekey="{!captchaSiteKey}"></div>
+                            <div id="captchaError" class="captcha-error" style="display:none;">Please complete the CAPTCHA verification.</div>
+                        </div>
+                    </apex:outputPanel>
+
                     <!-- Error Message -->
                     <div id="errorMessage" class="error-message" style="display:none;"></div>
 
@@ -102,6 +114,7 @@
                     formId: '{!JSENCODE(form.Id)}',
                     maxFileSize: {!IF(form.Max_File_Size_MB__c != null, form.Max_File_Size_MB__c, 10)} * 1024 * 1024,
                     enableFileUpload: {!form.Enable_File_Upload__c},
+                    enableCaptcha: {!captchaEnabled},
                     remoteAction: '{!$RemoteAction.CaseFormController.submitForm}'
                 };
             </script>

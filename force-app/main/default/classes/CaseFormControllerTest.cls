@@ -1,6 +1,6 @@
 /**
  * Test class for CaseFormController and ErrorLogger
- * Tests form loading, case creation, and file attachment
+ * Tests form loading, case creation, file attachment, and reCAPTCHA verification
  */
 @isTest
 private class CaseFormControllerTest {
@@ -18,7 +18,8 @@ private class CaseFormControllerTest {
             Success_Message__c = 'Thank you for your submission!',
             Active__c = true,
             Enable_File_Upload__c = true,
-            Max_File_Size_MB__c = 5
+            Max_File_Size_MB__c = 5,
+            Enable_Captcha__c = false
         );
         insert testForm;
 
@@ -66,6 +67,15 @@ private class CaseFormControllerTest {
             Active__c = false
         );
         insert inactiveForm;
+
+        // Create captcha-enabled form for testing
+        Form__c captchaForm = new Form__c(
+            Form_Name__c = 'captcha-form',
+            Title__c = 'Captcha Form',
+            Active__c = true,
+            Enable_Captcha__c = true
+        );
+        insert captchaForm;
     }
 
     /**
@@ -155,7 +165,8 @@ private class CaseFormControllerTest {
             testForm.Id,
             fieldValues,
             '',
-            ''
+            '',
+            ''  // No captcha token for non-captcha form
         );
         Test.stopTest();
 
@@ -191,7 +202,8 @@ private class CaseFormControllerTest {
             testForm.Id,
             fieldValues,
             'test-file.txt',
-            fileContent
+            fileContent,
+            ''  // No captcha token for non-captcha form
         );
         Test.stopTest();
 
@@ -221,6 +233,7 @@ private class CaseFormControllerTest {
             'a0000000000FAKE', // Invalid ID
             fieldValues,
             '',
+            '',
             ''
         );
         Test.stopTest();
@@ -243,6 +256,7 @@ private class CaseFormControllerTest {
             testForm.Id,
             fieldValues,
             '',
+            '',
             ''
         );
         Test.stopTest();
@@ -262,6 +276,7 @@ private class CaseFormControllerTest {
         Map<String, Object> result = CaseFormController.submitForm(
             testForm.Id,
             null,
+            '',
             '',
             ''
         );
@@ -290,6 +305,7 @@ private class CaseFormControllerTest {
         Map<String, Object> result = CaseFormController.submitForm(
             testForm.Id,
             fieldValues,
+            '',
             '',
             ''
         );
@@ -353,10 +369,10 @@ private class CaseFormControllerTest {
     }
 
     /**
-     * Test getCaptchaSiteKey method
+     * Test getCaptchaSiteKey method with no settings
      */
     @isTest
-    static void testGetCaptchaSiteKey() {
+    static void testGetCaptchaSiteKeyNoSettings() {
         PageReference pageRef = Page.CaseFormPage;
         pageRef.getParameters().put('name', 'test-form');
         Test.setCurrentPage(pageRef);
@@ -367,7 +383,247 @@ private class CaseFormControllerTest {
         String siteKey = controller.getCaptchaSiteKey();
         Test.stopTest();
 
-        // Currently returns empty string, future implementation will return actual key
-        System.assertEquals('', siteKey, 'Site key should be empty for now');
+        // Should return empty string when no settings configured
+        System.assertEquals('', siteKey, 'Site key should be empty when no settings');
+    }
+
+    /**
+     * Test getCaptchaEnabled method with no settings
+     */
+    @isTest
+    static void testGetCaptchaEnabledNoSettings() {
+        PageReference pageRef = Page.CaseFormPage;
+        pageRef.getParameters().put('name', 'captcha-form');
+        Test.setCurrentPage(pageRef);
+
+        CaseFormController controller = new CaseFormController();
+
+        Test.startTest();
+        Boolean captchaEnabled = controller.getCaptchaEnabled();
+        Test.stopTest();
+
+        // Should return false when captcha enabled on form but no site key configured
+        System.assertEquals(false, captchaEnabled, 'Captcha should be disabled when no site key');
+    }
+
+    /**
+     * Test getCaptchaSiteKey method with settings configured
+     */
+    @isTest
+    static void testGetCaptchaSiteKeyWithSettings() {
+        // Create reCAPTCHA settings
+        reCAPTCHA_Settings__c settings = new reCAPTCHA_Settings__c(
+            SetupOwnerId = UserInfo.getOrganizationId(),
+            Site_Key__c = 'test-site-key-123',
+            Secret_Key__c = 'test-secret-key-456'
+        );
+        insert settings;
+
+        PageReference pageRef = Page.CaseFormPage;
+        pageRef.getParameters().put('name', 'test-form');
+        Test.setCurrentPage(pageRef);
+
+        CaseFormController controller = new CaseFormController();
+
+        Test.startTest();
+        String siteKey = controller.getCaptchaSiteKey();
+        Test.stopTest();
+
+        System.assertEquals('test-site-key-123', siteKey, 'Site key should match configured value');
+    }
+
+    /**
+     * Test getCaptchaEnabled returns true when properly configured
+     */
+    @isTest
+    static void testGetCaptchaEnabledWithSettings() {
+        // Create reCAPTCHA settings
+        reCAPTCHA_Settings__c settings = new reCAPTCHA_Settings__c(
+            SetupOwnerId = UserInfo.getOrganizationId(),
+            Site_Key__c = 'test-site-key-123',
+            Secret_Key__c = 'test-secret-key-456'
+        );
+        insert settings;
+
+        PageReference pageRef = Page.CaseFormPage;
+        pageRef.getParameters().put('name', 'captcha-form');
+        Test.setCurrentPage(pageRef);
+
+        CaseFormController controller = new CaseFormController();
+
+        Test.startTest();
+        Boolean captchaEnabled = controller.getCaptchaEnabled();
+        Test.stopTest();
+
+        System.assertEquals(true, captchaEnabled, 'Captcha should be enabled when settings configured');
+    }
+
+    /**
+     * Test form submission with captcha enabled but no token provided
+     */
+    @isTest
+    static void testSubmitFormCaptchaNoToken() {
+        // Create reCAPTCHA settings
+        reCAPTCHA_Settings__c settings = new reCAPTCHA_Settings__c(
+            SetupOwnerId = UserInfo.getOrganizationId(),
+            Site_Key__c = 'test-site-key',
+            Secret_Key__c = 'test-secret-key'
+        );
+        insert settings;
+
+        Form__c captchaForm = [SELECT Id FROM Form__c WHERE Form_Name__c = 'captcha-form' LIMIT 1];
+
+        Map<String, String> fieldValues = new Map<String, String>{
+            'Subject' => 'Test Captcha No Token'
+        };
+
+        Test.startTest();
+        Map<String, Object> result = CaseFormController.submitForm(
+            captchaForm.Id,
+            fieldValues,
+            '',
+            '',
+            '' // Empty captcha token
+        );
+        Test.stopTest();
+
+        System.assertEquals(false, result.get('success'), 'Submission should fail without captcha token');
+        System.assert(((String)result.get('error')).contains('CAPTCHA'), 'Error should mention CAPTCHA');
+    }
+
+    /**
+     * Test form submission with captcha enabled and mock verification
+     */
+    @isTest
+    static void testSubmitFormCaptchaWithMockVerification() {
+        // Create reCAPTCHA settings
+        reCAPTCHA_Settings__c settings = new reCAPTCHA_Settings__c(
+            SetupOwnerId = UserInfo.getOrganizationId(),
+            Site_Key__c = 'test-site-key',
+            Secret_Key__c = 'test-secret-key'
+        );
+        insert settings;
+
+        Form__c captchaForm = [SELECT Id FROM Form__c WHERE Form_Name__c = 'captcha-form' LIMIT 1];
+
+        Map<String, String> fieldValues = new Map<String, String>{
+            'Subject' => 'Test Captcha With Token'
+        };
+
+        // Set up mock for HTTP callout
+        Test.setMock(HttpCalloutMock.class, new RecaptchaMockSuccess());
+
+        Test.startTest();
+        Map<String, Object> result = CaseFormController.submitForm(
+            captchaForm.Id,
+            fieldValues,
+            '',
+            '',
+            'test-captcha-token'
+        );
+        Test.stopTest();
+
+        System.assertEquals(true, result.get('success'), 'Submission should succeed with valid captcha');
+    }
+
+    /**
+     * Test form submission with captcha verification failure
+     */
+    @isTest
+    static void testSubmitFormCaptchaVerificationFails() {
+        // Create reCAPTCHA settings
+        reCAPTCHA_Settings__c settings = new reCAPTCHA_Settings__c(
+            SetupOwnerId = UserInfo.getOrganizationId(),
+            Site_Key__c = 'test-site-key',
+            Secret_Key__c = 'test-secret-key'
+        );
+        insert settings;
+
+        Form__c captchaForm = [SELECT Id FROM Form__c WHERE Form_Name__c = 'captcha-form' LIMIT 1];
+
+        Map<String, String> fieldValues = new Map<String, String>{
+            'Subject' => 'Test Captcha Fail'
+        };
+
+        // Set up mock for HTTP callout that returns failure
+        Test.setMock(HttpCalloutMock.class, new RecaptchaMockFailure());
+
+        Test.startTest();
+        Map<String, Object> result = CaseFormController.submitForm(
+            captchaForm.Id,
+            fieldValues,
+            '',
+            '',
+            'invalid-captcha-token'
+        );
+        Test.stopTest();
+
+        System.assertEquals(false, result.get('success'), 'Submission should fail with invalid captcha');
+        System.assert(((String)result.get('error')).contains('CAPTCHA'), 'Error should mention CAPTCHA');
+    }
+
+    /**
+     * Test form without captcha enabled ignores captcha token
+     */
+    @isTest
+    static void testSubmitFormNoCaptchaIgnoresToken() {
+        Form__c testForm = [SELECT Id FROM Form__c WHERE Form_Name__c = 'test-form' LIMIT 1];
+
+        Map<String, String> fieldValues = new Map<String, String>{
+            'Subject' => 'Test No Captcha'
+        };
+
+        Test.startTest();
+        Map<String, Object> result = CaseFormController.submitForm(
+            testForm.Id,
+            fieldValues,
+            '',
+            '',
+            '' // Empty token should be ignored
+        );
+        Test.stopTest();
+
+        System.assertEquals(true, result.get('success'), 'Submission should succeed without captcha');
+    }
+
+    /**
+     * Test controller loads form with Enable_Captcha__c field
+     */
+    @isTest
+    static void testControllerLoadsCaptchaForm() {
+        PageReference pageRef = Page.CaseFormPage;
+        pageRef.getParameters().put('name', 'captcha-form');
+        Test.setCurrentPage(pageRef);
+
+        Test.startTest();
+        CaseFormController controller = new CaseFormController();
+        Test.stopTest();
+
+        System.assertNotEquals(null, controller.form, 'Form should be loaded');
+        System.assertEquals(true, controller.form.Enable_Captcha__c, 'Enable_Captcha__c should be true');
+    }
+
+    /**
+     * Mock class for successful reCAPTCHA verification
+     */
+    private class RecaptchaMockSuccess implements HttpCalloutMock {
+        public HttpResponse respond(HttpRequest req) {
+            HttpResponse res = new HttpResponse();
+            res.setStatusCode(200);
+            res.setBody('{"success": true}');
+            return res;
+        }
+    }
+
+    /**
+     * Mock class for failed reCAPTCHA verification
+     */
+    private class RecaptchaMockFailure implements HttpCalloutMock {
+        public HttpResponse respond(HttpRequest req) {
+            HttpResponse res = new HttpResponse();
+            res.setStatusCode(200);
+            res.setBody('{"success": false, "error-codes": ["invalid-input-response"]}');
+            return res;
+        }
     }
 }

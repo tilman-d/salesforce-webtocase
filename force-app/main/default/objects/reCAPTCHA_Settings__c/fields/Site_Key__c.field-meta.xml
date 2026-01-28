@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Site_Key__c</fullName>
+    <description>The public Site Key from Google reCAPTCHA admin console. This key is used client-side to render the reCAPTCHA widget.</description>
+    <externalId>false</externalId>
+    <inlineHelpText>Enter the Site Key from your Google reCAPTCHA v2 admin console.</inlineHelpText>
+    <label>Site Key</label>
+    <length>255</length>
+    <required>false</required>
+    <trackTrending>false</trackTrending>
+    <type>Text</type>
+    <unique>false</unique>
+</CustomField>

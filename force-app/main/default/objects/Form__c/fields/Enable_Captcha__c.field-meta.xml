@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Enable_Captcha__c</fullName>
+    <defaultValue>false</defaultValue>
+    <description>When enabled, form submissions require reCAPTCHA verification to prevent spam and bot submissions.</description>
+    <externalId>false</externalId>
+    <inlineHelpText>Enable Google reCAPTCHA v2 to protect this form from spam and bot submissions.</inlineHelpText>
+    <label>Enable CAPTCHA</label>
+    <trackTrending>false</trackTrending>
+    <type>Checkbox</type>
+</CustomField>

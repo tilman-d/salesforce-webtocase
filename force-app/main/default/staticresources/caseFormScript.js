@@ -1,6 +1,6 @@
 /**
  * Web-to-Case Form Script
- * Handles form validation, file upload, and submission via Visualforce Remoting
+ * Handles form validation, file upload, reCAPTCHA, and submission via Visualforce Remoting
  */
 (function() {
     'use strict';
@@ -22,6 +22,9 @@
         }
 
         console.log('CaseForm: Initializing with formId:', formConfig.formId);
+        if (formConfig.enableCaptcha) {
+            console.log('CaseForm: reCAPTCHA is enabled');
+        }
 
         // Attach submit handler
         form.addEventListener('submit', handleSubmit);
@@ -52,6 +55,18 @@
             return;
         }
 
+        // Validate reCAPTCHA if enabled
+        var captchaToken = '';
+        if (formConfig.enableCaptcha) {
+            captchaToken = getCaptchaToken();
+            if (!captchaToken) {
+                showCaptchaError();
+                showError('Please complete the CAPTCHA verification.');
+                return;
+            }
+            hideCaptchaError();
+        }
+
         // Collect field values
         var fieldValues = collectFieldValues(form);
 
@@ -72,7 +87,7 @@
             // Read file and submit
             setLoading(true);
             readFileAsBase64(file, function(base64Content) {
-                submitToSalesforce(fieldValues, file.name, base64Content);
+                submitToSalesforce(fieldValues, file.name, base64Content, captchaToken);
             }, function(error) {
                 setLoading(false);
                 showError('Error reading file: ' + error);
@@ -80,7 +95,55 @@
         } else {
             // Submit without file
             setLoading(true);
-            submitToSalesforce(fieldValues, '', '');
+            submitToSalesforce(fieldValues, '', '', captchaToken);
+        }
+    }
+
+    /**
+     * Get reCAPTCHA token if available
+     */
+    function getCaptchaToken() {
+        if (typeof grecaptcha !== 'undefined') {
+            try {
+                return grecaptcha.getResponse();
+            } catch (e) {
+                console.error('CaseForm: Error getting reCAPTCHA response:', e);
+                return '';
+            }
+        }
+        return '';
+    }
+
+    /**
+     * Reset reCAPTCHA widget
+     */
+    function resetCaptcha() {
+        if (typeof grecaptcha !== 'undefined') {
+            try {
+                grecaptcha.reset();
+            } catch (e) {
+                console.error('CaseForm: Error resetting reCAPTCHA:', e);
+            }
+        }
+    }
+
+    /**
+     * Show CAPTCHA error message
+     */
+    function showCaptchaError() {
+        var captchaError = document.getElementById('captchaError');
+        if (captchaError) {
+            captchaError.style.display = 'block';
+        }
+    }
+
+    /**
+     * Hide CAPTCHA error message
+     */
+    function hideCaptchaError() {
+        var captchaError = document.getElementById('captchaError');
+        if (captchaError) {
+            captchaError.style.display = 'none';
         }
     }
 
@@ -163,16 +226,17 @@
     /**
      * Submit form data to Salesforce via Visualforce Remoting
      */
-    function submitToSalesforce(fieldValues, fileName, fileContent) {
+    function submitToSalesforce(fieldValues, fileName, fileContent, captchaToken) {
         console.log('CaseForm: Submitting to Salesforce...');
 
-        // Use Visualforce Remoting
+        // Use Visualforce Remoting with captcha token
         Visualforce.remoting.Manager.invokeAction(
             formConfig.remoteAction,
             formConfig.formId,
             fieldValues,
             fileName,
             fileContent,
+            captchaToken || '',
             handleResponse,
             { escape: false, timeout: 120000 }
         );
@@ -196,10 +260,18 @@
                 var errorMsg = result && result.error ? result.error : 'An unexpected error occurred.';
                 console.error('CaseForm: Submission failed -', errorMsg);
                 showError(errorMsg);
+                // Reset captcha on failure so user can try again
+                if (formConfig.enableCaptcha) {
+                    resetCaptcha();
+                }
             }
         } else {
             console.error('CaseForm: Remote action failed -', event.message);
             showError('Unable to submit form. Please try again later.');
+            // Reset captcha on failure
+            if (formConfig.enableCaptcha) {
+                resetCaptcha();
+            }
         }
     }
 

@@ -31,7 +31,8 @@ export default class FormDetail extends LightningElement {
         active: false,
         enableFileUpload: false,
         maxFileSizeMB: 10,
-        successMessage: ''
+        successMessage: '',
+        enableCaptcha: false
     };
 
     @track fields = [];
@@ -83,7 +84,8 @@ export default class FormDetail extends LightningElement {
                         active: result.active || false,
                         enableFileUpload: result.enableFileUpload || false,
                         maxFileSizeMB: result.maxFileSizeMB || 10,
-                        successMessage: result.successMessage || ''
+                        successMessage: result.successMessage || '',
+                        enableCaptcha: result.enableCaptcha || false
                     };
                     this.fields = (result.fields || []).map((f, index) => ({
                         ...f,
@@ -108,7 +110,8 @@ export default class FormDetail extends LightningElement {
                 active: false,
                 enableFileUpload: false,
                 maxFileSizeMB: 10,
-                successMessage: ''
+                successMessage: '',
+                enableCaptcha: false
             };
             this.fields = [];
             this.isLoading = false;
@@ -179,6 +182,11 @@ export default class FormDetail extends LightningElement {
 
     handleMaxFileSizeChange(event) {
         this.form.maxFileSizeMB = event.target.value;
+        this.hasUnsavedChanges = true;
+    }
+
+    handleCaptchaChange(event) {
+        this.form.enableCaptcha = event.target.checked;
         this.hasUnsavedChanges = true;
     }
 
@@ -361,7 +369,8 @@ export default class FormDetail extends LightningElement {
                 active: this.form.active,
                 enableFileUpload: this.form.enableFileUpload,
                 maxFileSizeMB: this.form.maxFileSizeMB,
-                successMessage: this.form.successMessage
+                successMessage: this.form.successMessage,
+                enableCaptcha: this.form.enableCaptcha
             };
 
             const formId = await saveForm({ formData: formData });

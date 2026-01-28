@@ -57,6 +57,11 @@
     </fieldPermissions>
     <fieldPermissions>
         <editable>true</editable>
+        <field>Form__c.Enable_Captcha__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
         <field>Form_Field__c.Required__c</field>
         <readable>true</readable>
     </fieldPermissions>
