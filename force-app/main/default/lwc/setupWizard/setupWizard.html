@@ -523,87 +523,93 @@
                         </p>
                     </div>
 
-                    <!-- Sample Form -->
+                    <!-- Box 1: Test Your Setup -->
                     <div class="slds-box slds-m-bottom_medium">
-                        <div class="slds-text-heading_small slds-m-bottom_small">1. Create a Sample Form</div>
-                        <template if:false={sampleFormCreated}>
-                            <p class="slds-m-bottom_small">
-                                Create a sample "Contact Support" form to test your setup.
-                            </p>
-                            <lightning-button
-                                label="Create Sample Form"
-                                variant="brand"
-                                onclick={handleCreateSampleForm}
-                                icon-name="utility:add">
-                            </lightning-button>
-                        </template>
+                        <div class="slds-text-heading_small slds-m-bottom_medium">Test Your Setup</div>
+
+                        <!-- Subsection: Sample Form -->
+                        <div class="slds-m-bottom_medium">
+                            <div class="slds-text-title_caps slds-m-bottom_x-small">Sample Form (Optional)</div>
+                            <template if:false={sampleFormCreated}>
+                                <p class="slds-m-bottom_small">
+                                    Create a sample "Contact Support" form to test your setup.
+                                </p>
+                                <lightning-button
+                                    label="Create Sample Form"
+                                    variant="neutral"
+                                    onclick={handleCreateSampleForm}
+                                    icon-name="utility:add">
+                                </lightning-button>
+                            </template>
+                            <template if:true={sampleFormCreated}>
+                                <div class="slds-grid slds-grid_vertical-align-center">
+                                    <lightning-icon icon-name="utility:success" size="x-small" variant="success" class="slds-m-right_x-small"></lightning-icon>
+                                    <span class="slds-text-color_success">Sample form created!</span>
+                                </div>
+                            </template>
+                        </div>
+
+                        <!-- Subsection: Test Form (only shown after sample form created) -->
                         <template if:true={sampleFormCreated}>
+                            <div class="slds-border_bottom slds-m-bottom_medium"></div>
+                            <div class="slds-m-bottom_medium">
+                                <div class="slds-text-title_caps slds-m-bottom_x-small">Test Form</div>
+                                <lightning-button
+                                    label="Test Form (Opens in New Tab)"
+                                    variant="brand"
+                                    onclick={handleTestForm}
+                                    icon-name="utility:new_window">
+                                </lightning-button>
+                                <p class="slds-text-body_small slds-text-color_weak slds-m-top_x-small">
+                                    Tip: Test in an incognito/private browser window to simulate the guest user experience.
+                                </p>
+                            </div>
+                        </template>
+
+                        <!-- Divider -->
+                        <div class="slds-border_bottom slds-m-bottom_medium"></div>
+
+                        <!-- Subsection: Public URL -->
+                        <div>
+                            <div class="slds-text-title_caps slds-m-bottom_x-small">Your Public Form URL</div>
+                            <template if:false={sampleFormCreated}>
+                                <p class="slds-text-body_small slds-m-bottom_small">
+                                    Use this base URL with <strong>?form=your-form-name</strong> to access any form you create.
+                                </p>
+                            </template>
+                            <template if:true={sampleFormCreated}>
+                                <p class="slds-text-body_small slds-m-bottom_small">
+                                    This URL opens the "Contact Support" sample form.
+                                </p>
+                            </template>
                             <div class="slds-grid slds-grid_vertical-align-center">
-                                <lightning-icon icon-name="utility:success" size="x-small" variant="success" class="slds-m-right_x-small"></lightning-icon>
-                                <span class="slds-text-color_success">Sample form created!</span>
-                            </div>
-                        </template>
-                    </div>
-
-                    <!-- Test Form -->
-                    <div class="slds-box slds-m-bottom_medium">
-                        <div class="slds-text-heading_small slds-m-bottom_small">2. Test Your Form</div>
-                        <template if:true={sampleFormCreated}>
-                            <p class="slds-m-bottom_small">
-                                Open the form in a new tab to verify everything works.
-                            </p>
-                            <lightning-button
-                                label="Test Form (Opens in New Tab)"
-                                variant="brand"
-                                onclick={handleTestForm}
-                                icon-name="utility:new_window">
-                            </lightning-button>
-                            <p class="slds-text-body_small slds-text-color_weak slds-m-top_x-small">
-                                Tip: Test in an incognito/private browser window to simulate the guest user experience.
-                            </p>
-                        </template>
-                        <template if:false={sampleFormCreated}>
-                            <p class="slds-text-body_small slds-text-color_weak">
-                                Create the sample form above first to test your setup.
-                            </p>
-                        </template>
-                    </div>
-
-                    <!-- Public URL -->
-                    <div class="slds-box slds-m-bottom_medium">
-                        <div class="slds-text-heading_small slds-m-bottom_small">Your Public Form URL</div>
-                        <template if:true={sampleFormCreated}>
-                            <p class="slds-text-body_small slds-m-bottom_small">
-                                This URL opens the "Contact Support" sample form.
-                            </p>
-                        </template>
-                        <template if:false={sampleFormCreated}>
-                            <p class="slds-text-body_small slds-m-bottom_small">
-                                Use this base URL with <strong>?form=your-form-name</strong> to access any form you create.
-                            </p>
-                        </template>
-                        <div class="slds-grid slds-grid_vertical-align-center">
-                            <div class="slds-col slds-grow">
-                                <lightning-input
-                                    type="url"
-                                    value={displayUrl}
-                                    readonly
-                                    variant="label-hidden">
-                                </lightning-input>
-                            </div>
-                            <div class="slds-col slds-shrink slds-m-left_small">
-                                <lightning-button-icon
-                                    icon-name="utility:copy"
-                                    alternative-text="Copy URL"
-                                    onclick={handleCopyUrl}>
-                                </lightning-button-icon>
+                                <div class="slds-col slds-grow">
+                                    <lightning-input
+                                        type="url"
+                                        label="Public Form URL"
+                                        value={displayUrl}
+                                        readonly
+                                        variant="label-hidden">
+                                    </lightning-input>
+                                </div>
+                                <div class="slds-col slds-shrink slds-m-left_small">
+                                    <lightning-button-icon
+                                        icon-name="utility:copy"
+                                        alternative-text="Copy URL to clipboard"
+                                        title="Copy URL"
+                                        onclick={handleCopyUrl}>
+                                    </lightning-button-icon>
+                                </div>
                             </div>
                         </div>
                     </div>
 
-                    <!-- Actions -->
+                    <!-- Box 2: What's Next -->
                     <div class="slds-box slds-m-bottom_medium">
-                        <div class="slds-text-heading_small slds-m-bottom_small">Next Steps</div>
+                        <div class="slds-text-heading_small slds-m-bottom_small">What's Next</div>
+                        <p class="slds-m-bottom_small">
+                            Use Form Manager to create and customize your web forms.
+                        </p>
                         <lightning-button
                             label="Go to Form Manager"
                             variant="brand"

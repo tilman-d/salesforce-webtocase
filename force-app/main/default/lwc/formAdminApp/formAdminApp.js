@@ -37,6 +37,18 @@ const COLUMNS = [
         cellAttributes: { alignment: 'center' }
     },
     {
+        label: 'Created',
+        fieldName: 'createdDate',
+        type: 'date',
+        sortable: true,
+        initialWidth: 120,
+        typeAttributes: {
+            year: 'numeric',
+            month: 'short',
+            day: '2-digit'
+        }
+    },
+    {
         type: 'action',
         typeAttributes: {
             rowActions: [
@@ -56,6 +68,8 @@ export default class FormAdminApp extends LightningElement {
     @track selectedFormId = null;
     @track showDeleteModal = false;
     @track formToDelete = null;
+    @track sortedBy = 'createdDate';
+    @track sortedDirection = 'desc';
 
     columns = COLUMNS;
     wiredFormsResult;
@@ -107,6 +121,36 @@ export default class FormAdminApp extends LightningElement {
         return this.forms && this.forms.length > 0;
     }
 
+    get sortedForms() {
+        if (!this.forms || this.forms.length === 0) {
+            return [];
+        }
+        const data = [...this.forms];
+        const fieldName = this.sortedBy;
+        const reverse = this.sortedDirection === 'desc' ? -1 : 1;
+
+        data.sort((a, b) => {
+            let valueA = a[fieldName];
+            let valueB = b[fieldName];
+
+            // Handle null/undefined values
+            if (valueA === null || valueA === undefined) valueA = '';
+            if (valueB === null || valueB === undefined) valueB = '';
+
+            // Handle different types
+            if (typeof valueA === 'string') {
+                valueA = valueA.toLowerCase();
+                valueB = (valueB || '').toLowerCase();
+            }
+
+            if (valueA < valueB) return -1 * reverse;
+            if (valueA > valueB) return 1 * reverse;
+            return 0;
+        });
+
+        return data;
+    }
+
     get deleteModalMessage() {
         if (this.formToDelete) {
             return `Are you sure you want to delete "${this.formToDelete.title}"? This will also delete all ${this.formToDelete.fieldCount} field(s) associated with this form.`;
@@ -116,6 +160,11 @@ export default class FormAdminApp extends LightningElement {
 
     handleNewForm() {
         window.location.hash = '#new';
+    }
+
+    handleSort(event) {
+        this.sortedBy = event.detail.fieldName;
+        this.sortedDirection = event.detail.sortDirection;
     }
 
     handleRowAction(event) {

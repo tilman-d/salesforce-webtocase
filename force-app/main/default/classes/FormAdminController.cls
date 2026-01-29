@@ -19,6 +19,7 @@ public with sharing class FormAdminController {
         @AuraEnabled public Boolean enableCaptcha;
         @AuraEnabled public Integer fieldCount;
         @AuraEnabled public List<FieldWrapper> fields;
+        @AuraEnabled public Datetime createdDate;
 
         public FormWrapper() {
             this.fields = new List<FieldWrapper>();
@@ -41,6 +42,7 @@ public with sharing class FormAdminController {
             this.enableCaptcha = form.Enable_Captcha__c;
             this.fieldCount = fieldCount;
             this.fields = new List<FieldWrapper>();
+            this.createdDate = form.CreatedDate;
         }
     }
 
@@ -125,7 +127,8 @@ public with sharing class FormAdminController {
         // Query all forms
         for (Form__c form : [
             SELECT Id, Form_Name__c, Title__c, Description__c, Active__c,
-                   Enable_File_Upload__c, Max_File_Size_MB__c, Success_Message__c, Enable_Captcha__c
+                   Enable_File_Upload__c, Max_File_Size_MB__c, Success_Message__c, Enable_Captcha__c,
+                   CreatedDate
             FROM Form__c
             ORDER BY CreatedDate DESC
         ]) {
@@ -147,7 +150,8 @@ public with sharing class FormAdminController {
 
         List<Form__c> forms = [
             SELECT Id, Form_Name__c, Title__c, Description__c, Active__c,
-                   Enable_File_Upload__c, Max_File_Size_MB__c, Success_Message__c, Enable_Captcha__c
+                   Enable_File_Upload__c, Max_File_Size_MB__c, Success_Message__c, Enable_Captcha__c,
+                   CreatedDate
             FROM Form__c
             WHERE Id = :formId
             LIMIT 1

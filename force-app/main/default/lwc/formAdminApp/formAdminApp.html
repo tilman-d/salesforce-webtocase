@@ -21,9 +21,12 @@
             <template if:true={hasForms}>
                 <lightning-datatable
                     key-field="id"
-                    data={forms}
+                    data={sortedForms}
                     columns={columns}
                     onrowaction={handleRowAction}
+                    onsort={handleSort}
+                    sorted-by={sortedBy}
+                    sorted-direction={sortedDirection}
                     hide-checkbox-column>
                 </lightning-datatable>
             </template>

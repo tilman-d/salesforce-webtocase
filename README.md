@@ -6,12 +6,12 @@ A Salesforce app that lets you create public web forms that submit Cases with fi
 
 | | |
 |---|---|
-| **Version** | v0.4.3 |
+| **Version** | v0.4.4 |
 | **Phases Complete** | 0-3 (MVP, Admin UI, Setup Wizard, reCAPTCHA) |
 | **Next Up** | Phase 4 (Embeddable widget, multi-file upload) |
 | **Dev Org** | `devorg` (tilman.dietrich@gmail.com.dev) |
 | **GitHub** | https://github.com/tilman-d/salesforce-webtocase |
-| **Last Change** | Fixed Setup Wizard path component (uses native `lightning-progress-indicator`) |
+| **Last Change** | UX improvements: Setup Wizard simplified, Form Manager sorting & Created column |
 
 ---
 
@@ -65,7 +65,8 @@ Salesforce's native Web-to-Case doesn't support file attachments. This app solve
 Access via the **Form Manager** tab in Salesforce.
 
 **Features:**
-- List all forms with field counts
+- List all forms with field counts and created date
+- **Sortable columns** - click column headers to sort (Form Name, Title, Fields, Active, Created)
 - Create new forms
 - Edit existing forms (click form name to edit)
 - Delete forms with confirmation modal
@@ -105,7 +106,9 @@ Access via the **Setup Wizard** tab or the **Web-to-Case Forms** app in the App 
 3. **Configure** - Auto-configure Guest User object/field permissions with security acknowledgment
 4. **Verify** - Manual configuration instructions for Apex class and VF page access with validation
 5. **reCAPTCHA** - Configure Google reCAPTCHA API keys (optional, can skip)
-6. **Complete** - Create sample form, test form, view public URL, link to Form Manager
+6. **Complete** - Simplified 2-box layout:
+   - "Test Your Setup" box: Sample form creation (optional), Test Form button, Public URL with copy
+   - "What's Next" box: Link to Form Manager
 
 **Features:**
 - Automatic detection of active Salesforce Sites
@@ -446,6 +449,17 @@ force-app/main/default/
 
 ## Changelog
 
+### v0.4.4 (2026-01-29) - UX Improvements
+- **Setup Wizard Complete step**: Consolidated from 4 boxes to 2 boxes for cleaner UX
+  - Box 1: "Test Your Setup" - combines Sample Form, Test Form, and Public URL sections
+  - Box 2: "What's Next" - links to Form Manager
+  - Test Form section now only appears after sample form is created (prevents confusing "Form Not Available" errors)
+  - Sample Form marked as "(Optional)" for clarity
+- **Form Manager**: Added "Created" date column (shows when each form was created)
+- **Form Manager**: Added column sorting - click any column header to sort ascending/descending
+- **Form Editor**: Fixed dropdown overflow issue where "Maps to Case Field" dropdown was cut off at bottom of screen
+- **Bug fix**: Fixed "SObject row was retrieved via SOQL without querying the requested field: Form__c.CreatedDate" error
+
 ### v0.4.3 (2026-01-29) - Setup Wizard Path Component Fix
 - **Fixed:** Replaced custom CSS chevron path with standard `lightning-progress-indicator` component
 - Eliminates persistent white gap issues between chevron steps
@@ -553,11 +567,28 @@ The following items require manual verification before release:
 
 ## Next Session Starting Point
 
-**Status:** Phases 0-3 complete. Ready for Phase 4.
+**Status:** Phases 0-3 complete and polished. Ready for Phase 4.
+
+**Recent changes (v0.4.4):**
+- Setup Wizard Complete step simplified (4 boxes → 2 boxes)
+- Form Manager now has sortable columns and "Created" date column
+- Various UX bug fixes (dropdown overflow, CreatedDate query)
+
+**Key architecture notes:**
+- Forms are **org-wide** (not tied to specific Sites)
+- Sites are just public entry points - any configured Site can serve any form
+- Users can run the Setup Wizard multiple times for different Sites
 
 **Dev org:** `tilman.dietrich@gmail.com.dev` (alias: `devorg`)
 
 **GitHub:** https://github.com/tilman-d/salesforce-webtocase
+
+**Quick start for next session:**
+```bash
+cd /root/caseformpage
+sf org login web --alias devorg  # if needed
+sf project deploy start --target-org devorg
+```
 
 ---
 

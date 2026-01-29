@@ -29,3 +29,9 @@ coverage/
 *.tmp
 *.bak
 retrieved/
+
+# Claude Code
+.claude/
+
+# Test results
+test-results/
