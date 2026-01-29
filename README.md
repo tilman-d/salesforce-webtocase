@@ -2,6 +2,19 @@
 
 A Salesforce app that lets you create public web forms that submit Cases with file attachments. Built for the AppExchange.
 
+## Quick Status
+
+| | |
+|---|---|
+| **Version** | v0.4.3 |
+| **Phases Complete** | 0-3 (MVP, Admin UI, Setup Wizard, reCAPTCHA) |
+| **Next Up** | Phase 4 (Embeddable widget, multi-file upload) |
+| **Dev Org** | `devorg` (tilman.dietrich@gmail.com.dev) |
+| **GitHub** | https://github.com/tilman-d/salesforce-webtocase |
+| **Last Change** | Fixed Setup Wizard path component (uses native `lightning-progress-indicator`) |
+
+---
+
 ## Why This Exists
 
 Salesforce's native Web-to-Case doesn't support file attachments. This app solves that problem with:
@@ -577,13 +590,17 @@ The following items require manual verification before release:
 
 When creating the managed/unlocked package for AppExchange, include the following metadata components:
 
-### Custom Objects (4)
+### Custom Objects (3)
 | Component | API Name | Description |
 |-----------|----------|-------------|
 | Custom Object | `Form__c` | Form configuration |
 | Custom Object | `Form_Field__c` | Form field definitions |
 | Custom Object | `Error_Log__c` | Error logging |
-| Custom Metadata Type | `reCAPTCHA_Settings__c` | reCAPTCHA API keys and settings |
+
+### Custom Settings (1)
+| Component | API Name | Description |
+|-----------|----------|-------------|
+| Custom Setting (Hierarchy) | `reCAPTCHA_Settings__c` | reCAPTCHA API keys and settings (Protected) |
 
 ### Custom Fields - Form__c (8)
 | Field | API Name |
@@ -693,7 +710,7 @@ When creating the managed/unlocked package for AppExchange, include the followin
     </types>
     <types>
         <members>reCAPTCHA_Settings__c</members>
-        <name>CustomMetadata</name>
+        <name>CustomObject</name>
     </types>
     <types>
         <members>CaseFormController</members>
@@ -749,7 +766,7 @@ When creating the managed/unlocked package for AppExchange, include the followin
 
 ### Notes for Packaging
 
-1. **Custom Metadata Type**: `reCAPTCHA_Settings__c` should be included as a Custom Metadata Type, not a Custom Setting. The records themselves (API keys) are NOT included - users configure these post-install.
+1. **Custom Setting**: `reCAPTCHA_Settings__c` is a Protected Hierarchy Custom Setting. The records themselves (API keys) are NOT included - users configure these post-install via Setup Wizard.
 
 2. **Remote Site Setting**: Include `Google_reCAPTCHA` for reCAPTCHA verification callouts.
 
