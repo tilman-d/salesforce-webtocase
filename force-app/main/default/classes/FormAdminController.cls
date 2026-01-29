@@ -17,6 +17,8 @@ public with sharing class FormAdminController {
         @AuraEnabled public Decimal maxFileSizeMB;
         @AuraEnabled public String successMessage;
         @AuraEnabled public Boolean enableCaptcha;
+        @AuraEnabled public String siteId;
+        @AuraEnabled public String publicUrl;
         @AuraEnabled public Integer fieldCount;
         @AuraEnabled public List<FieldWrapper> fields;
         @AuraEnabled public Datetime createdDate;
@@ -40,9 +42,29 @@ public with sharing class FormAdminController {
             this.maxFileSizeMB = form.Max_File_Size_MB__c;
             this.successMessage = form.Success_Message__c;
             this.enableCaptcha = form.Enable_Captcha__c;
+            this.siteId = form.Site_Id__c;
             this.fieldCount = fieldCount;
             this.fields = new List<FieldWrapper>();
             this.createdDate = form.CreatedDate;
+        }
+    }
+
+    /**
+     * Wrapper class for Site info
+     */
+    public class SiteInfo {
+        @AuraEnabled public String id;
+        @AuraEnabled public String name;
+        @AuraEnabled public String masterLabel;
+        @AuraEnabled public String baseUrl;
+
+        public SiteInfo() {}
+
+        public SiteInfo(Site s, String baseUrl) {
+            this.id = s.Id;
+            this.name = s.Name;
+            this.masterLabel = s.MasterLabel;
+            this.baseUrl = baseUrl;
         }
     }
 
@@ -124,16 +146,47 @@ public with sharing class FormAdminController {
             fieldCounts.put((Id)ar.get('Form__c'), (Integer)ar.get('cnt'));
         }
 
-        // Query all forms
-        for (Form__c form : [
+        // Get default Site info once
+        Map<String, String> defaultSiteInfo = getDefaultSiteInfo();
+        String defaultBaseUrl = defaultSiteInfo.get('baseUrl');
+
+        // Build a map of Site IDs to base URLs for forms with overrides
+        Set<String> siteIds = new Set<String>();
+        List<Form__c> forms = [
             SELECT Id, Form_Name__c, Title__c, Description__c, Active__c,
                    Enable_File_Upload__c, Max_File_Size_MB__c, Success_Message__c, Enable_Captcha__c,
-                   CreatedDate
+                   Site_Id__c, CreatedDate
             FROM Form__c
             ORDER BY CreatedDate DESC
-        ]) {
+        ];
+
+        for (Form__c form : forms) {
+            if (String.isNotBlank(form.Site_Id__c)) {
+                siteIds.add(form.Site_Id__c);
+            }
+        }
+
+        // Get base URLs for all unique Site IDs
+        Map<String, String> siteBaseUrls = new Map<String, String>();
+        for (String siteId : siteIds) {
+            String baseUrl = getSiteBaseUrl(siteId);
+            if (String.isNotBlank(baseUrl)) {
+                siteBaseUrls.put(siteId, baseUrl);
+            }
+        }
+
+        // Build wrappers with public URLs
+        for (Form__c form : forms) {
             Integer count = fieldCounts.containsKey(form.Id) ? fieldCounts.get(form.Id) : 0;
-            wrappers.add(new FormWrapper(form, count));
+            FormWrapper wrapper = new FormWrapper(form, count);
+
+            // Resolve base URL: form override or default
+            String baseUrl = String.isNotBlank(form.Site_Id__c) && siteBaseUrls.containsKey(form.Site_Id__c)
+                ? siteBaseUrls.get(form.Site_Id__c)
+                : defaultBaseUrl;
+
+            wrapper.publicUrl = buildFormUrl(baseUrl, form.Form_Name__c);
+            wrappers.add(wrapper);
         }
 
         return wrappers;
@@ -151,7 +204,7 @@ public with sharing class FormAdminController {
         List<Form__c> forms = [
             SELECT Id, Form_Name__c, Title__c, Description__c, Active__c,
                    Enable_File_Upload__c, Max_File_Size_MB__c, Success_Message__c, Enable_Captcha__c,
-                   CreatedDate
+                   Site_Id__c, CreatedDate
             FROM Form__c
             WHERE Id = :formId
             LIMIT 1
@@ -163,6 +216,17 @@ public with sharing class FormAdminController {
 
         Form__c form = forms[0];
         FormWrapper wrapper = new FormWrapper(form, 0);
+
+        // Compute public URL
+        String baseUrl;
+        if (String.isNotBlank(form.Site_Id__c)) {
+            baseUrl = getSiteBaseUrl(form.Site_Id__c);
+        }
+        if (String.isBlank(baseUrl)) {
+            Map<String, String> defaultSiteInfo = getDefaultSiteInfo();
+            baseUrl = defaultSiteInfo.get('baseUrl');
+        }
+        wrapper.publicUrl = buildFormUrl(baseUrl, form.Form_Name__c);
 
         // Get fields
         List<Form_Field__c> fields = [
@@ -198,6 +262,7 @@ public with sharing class FormAdminController {
         Decimal maxFileSizeMB = formData.get('maxFileSizeMB') != null ? Decimal.valueOf(String.valueOf(formData.get('maxFileSizeMB'))) : 10;
         String successMessage = (String)formData.get('successMessage');
         Boolean enableCaptcha = (Boolean)formData.get('enableCaptcha');
+        String siteId = (String)formData.get('siteId');
 
         // Validate required fields
         if (String.isBlank(formName)) {
@@ -234,6 +299,7 @@ public with sharing class FormAdminController {
         form.Max_File_Size_MB__c = maxFileSizeMB;
         form.Success_Message__c = successMessage;
         form.Enable_Captcha__c = enableCaptcha == true;
+        form.Site_Id__c = String.isNotBlank(siteId) ? siteId : null;
 
         try {
             upsert form;
@@ -413,5 +479,83 @@ public with sharing class FormAdminController {
         }
 
         return result;
+    }
+
+    /**
+     * Get active sites for dropdown
+     */
+    @AuraEnabled(cacheable=true)
+    public static List<SiteInfo> getActiveSites() {
+        List<SiteInfo> sites = new List<SiteInfo>();
+
+        try {
+            for (Site s : [
+                SELECT Id, Name, MasterLabel
+                FROM Site
+                WHERE Status = 'Active'
+                ORDER BY MasterLabel ASC
+            ]) {
+                String baseUrl = getSiteBaseUrl(s.Id);
+                sites.add(new SiteInfo(s, baseUrl));
+            }
+        } catch (Exception e) {
+            // If Sites feature is not enabled or query fails, return empty list
+        }
+
+        return sites;
+    }
+
+    /**
+     * Get default site info from settings
+     */
+    @AuraEnabled(cacheable=true)
+    public static Map<String, String> getDefaultSiteInfo() {
+        Map<String, String> result = new Map<String, String>();
+
+        try {
+            reCAPTCHA_Settings__c settings = reCAPTCHA_Settings__c.getOrgDefaults();
+            if (settings != null && settings.Id != null) {
+                result.put('siteId', settings.Default_Site_Id__c);
+                result.put('baseUrl', settings.Default_Site_Base_Url__c);
+            }
+        } catch (Exception e) {
+            // Return empty map on error
+        }
+
+        return result;
+    }
+
+    /**
+     * Helper to get Site base URL (via SiteDetail)
+     */
+    private static String getSiteBaseUrl(String siteId) {
+        try {
+            List<SiteDetail> details = [
+                SELECT SecureUrl
+                FROM SiteDetail
+                WHERE DurableId = :siteId
+            ];
+            if (!details.isEmpty() && String.isNotBlank(details[0].SecureUrl)) {
+                return details[0].SecureUrl;
+            }
+        } catch (Exception e) {
+            // Return null on error
+        }
+        return null;
+    }
+
+    /**
+     * Build public URL for a form (server-side, URL-encoded)
+     */
+    public static String buildFormUrl(String baseUrl, String formName) {
+        if (String.isBlank(baseUrl) || String.isBlank(formName)) {
+            return null;
+        }
+        String url = baseUrl;
+        if (!url.endsWith('/')) {
+            url += '/';
+        }
+        url += 'apex/CaseFormPage?form=' + EncodingUtil.urlEncode(formName, 'UTF-8');
+        return url;
     }
 }

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Default_Site_Base_Url__c</fullName>
+    <description>Cached base URL for the default Site (e.g., https://acme.my.site.com/support). Set during Setup Wizard to avoid re-querying Site/SiteDetail on every page load.</description>
+    <externalId>false</externalId>
+    <inlineHelpText>The base URL of the default Site used for public form URLs.</inlineHelpText>
+    <label>Default Site Base Url</label>
+    <length>255</length>
+    <required>false</required>
+    <trackTrending>false</trackTrending>
+    <type>Text</type>
+    <unique>false</unique>
+</CustomField>

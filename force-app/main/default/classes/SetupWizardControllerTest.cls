@@ -525,6 +525,54 @@ private class SetupWizardControllerTest {
         System.assertEquals(2, summary.permissionsApplied.size(), 'Should have 2 permissions applied');
     }
 
+    // ==================== saveDefaultSite Tests ====================
+
+    /**
+     * Test saveDefaultSite with blank siteId - should throw exception
+     */
+    @isTest
+    static void testSaveDefaultSiteBlankId() {
+        Test.startTest();
+        try {
+            SetupWizardController.saveDefaultSite('');
+            System.assert(false, 'Should have thrown exception');
+        } catch (AuraHandledException e) {
+            System.assert(e.getMessage().contains('Site ID is required'), 'Should throw required ID error');
+        }
+        Test.stopTest();
+    }
+
+    /**
+     * Test saveDefaultSite with null siteId - should throw exception
+     */
+    @isTest
+    static void testSaveDefaultSiteNullId() {
+        Test.startTest();
+        try {
+            SetupWizardController.saveDefaultSite(null);
+            System.assert(false, 'Should have thrown exception');
+        } catch (AuraHandledException e) {
+            System.assert(e.getMessage().contains('Site ID is required'), 'Should throw required ID error');
+        }
+        Test.stopTest();
+    }
+
+    /**
+     * Test saveDefaultSite with invalid siteId - should throw exception
+     */
+    @isTest
+    static void testSaveDefaultSiteInvalidId() {
+        Test.startTest();
+        try {
+            SetupWizardController.saveDefaultSite('0DM000000000001');
+            System.assert(false, 'Should have thrown exception');
+        } catch (AuraHandledException e) {
+            System.assert(e.getMessage().contains('Invalid Site ID') || e.getMessage().contains('Error saving'),
+                'Should throw invalid site or error message');
+        }
+        Test.stopTest();
+    }
+
     // ==================== reCAPTCHA Settings Tests ====================
 
     /**

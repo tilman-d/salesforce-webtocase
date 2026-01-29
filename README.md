@@ -2,16 +2,101 @@
 
 A Salesforce app that lets you create public web forms that submit Cases with file attachments. Built for the AppExchange.
 
+---
+
+## 🧪 MANUAL TESTING REQUIRED: URL Display Feature
+
+The following new feature needs manual verification before release:
+
+### URL Display Feature Overview
+- **Site dropdown** in Form Manager (new/edit form views)
+- **Public URL display** with copy button
+- **"Copy URL" row action** in form list view
+- **Default Site configuration** saved during Setup Wizard
+
+### Testing Steps
+
+#### 1. Setup Wizard - Save Default Site
+- [ ] Go to **Setup Wizard** tab
+- [ ] Complete Steps 1-2 (Welcome, Select Site)
+- [ ] On Step 2, select a Site and proceed to Step 3
+- [ ] Complete the wizard through to Step 6
+- [ ] Verify the default Site is saved (check `reCAPTCHA_Settings__c` via SOQL or Setup)
+
+```apex
+// Verify default Site was saved:
+reCAPTCHA_Settings__c s = reCAPTCHA_Settings__c.getOrgDefaults();
+System.debug('Default Site ID: ' + s.Default_Site_Id__c);
+System.debug('Default Base URL: ' + s.Default_Site_Base_Url__c);
+```
+
+#### 2. Form Manager List View - Copy URL Action
+- [ ] Go to **Form Manager** tab
+- [ ] Click the **dropdown menu** (▼) on any form row
+- [ ] Verify **"Copy URL"** action appears in the menu
+- [ ] Click **"Copy URL"**
+- [ ] Verify toast: "URL copied to clipboard" (success) OR "No URL available..." (warning if no Site configured)
+- [ ] Paste the URL somewhere to verify it copied correctly
+- [ ] Verify URL format: `https://[site-domain]/apex/CaseFormPage?form=[form-name]`
+
+#### 3. Form Manager List View - View Live Action
+- [ ] Click **"View Live"** from the row action menu
+- [ ] Verify it opens the correct **public Site URL** (not internal Salesforce URL)
+- [ ] Verify the form loads correctly
+
+#### 4. New Form - Site Dropdown & Public URL
+- [ ] Click **"+ New Form"** button
+- [ ] Verify **Site** dropdown appears (with "Use Default Site" placeholder)
+- [ ] Verify **Public URL** section appears
+- [ ] If default Site is configured: verify URL is displayed with copy button
+- [ ] If no default Site: verify warning "No default Site configured. Run the Setup Wizard first."
+- [ ] Click the **copy button** next to the URL (if shown)
+- [ ] Verify toast confirms URL copied
+
+#### 5. Edit Form - Site Dropdown & Public URL
+- [ ] Edit an existing form (click form name or use Edit action)
+- [ ] Verify **Site** dropdown appears with current setting
+- [ ] Verify **Public URL** section shows the correct URL
+- [ ] Change the Site dropdown to a different Site
+- [ ] Verify URL updates immediately
+- [ ] Save the form
+- [ ] Reload and verify Site selection persisted
+
+#### 6. Per-Form Site Override
+- [ ] Create/edit a form
+- [ ] Select a **specific Site** (not "Use Default Site")
+- [ ] Save the form
+- [ ] Verify the form's URL uses that specific Site's domain
+- [ ] Change back to "Use Default Site"
+- [ ] Verify URL reverts to using the default Site's domain
+
+#### 7. Edge Cases
+- [ ] **No Sites in org**: Verify graceful handling (empty dropdown, warning message)
+- [ ] **Special characters in form name**: Create form with spaces/special chars, verify URL is properly encoded
+- [ ] **Re-run Setup Wizard**: Select different Site, verify default updates
+
+### Expected Behavior Summary
+
+| Scenario | Expected Result |
+|----------|-----------------|
+| Default Site configured | URLs display correctly everywhere |
+| No default Site | Warning message, "Copy URL" shows toast warning |
+| Per-form Site override | Form uses override Site, not default |
+| "Use Default Site" selected | Form uses org-wide default |
+| Special chars in form name | URL-encoded (e.g., `my%20form`) |
+
+---
+
 ## Quick Status
 
 | | |
 |---|---|
-| **Version** | v0.4.4 |
+| **Version** | v0.4.5 |
 | **Phases Complete** | 0-3 (MVP, Admin UI, Setup Wizard, reCAPTCHA) |
 | **Next Up** | Phase 4 (Embeddable widget, multi-file upload) |
 | **Dev Org** | `devorg` (tilman.dietrich@gmail.com.dev) |
 | **GitHub** | https://github.com/tilman-d/salesforce-webtocase |
-| **Last Change** | UX improvements: Setup Wizard simplified, Form Manager sorting & Created column |
+| **Last Change** | URL Display Feature: Site dropdown, Public URL with copy button, Copy URL row action |
 
 ---
 
@@ -375,13 +460,18 @@ force-app/main/default/
 ├── objects/
 │   ├── Form__c/                         # Form configuration
 │   │   └── fields/
-│   │       └── Enable_Captcha__c        # Phase 3
+│   │       ├── Enable_Captcha__c        # Phase 3
+│   │       └── Site_Id__c               # URL Display Feature
 │   ├── Form_Field__c/                   # Field definitions
 │   ├── Error_Log__c/                    # Error logging
-│   └── reCAPTCHA_Settings__c/           # Phase 3 - API keys
+│   └── reCAPTCHA_Settings__c/           # Phase 3 - API keys + Site settings
 │       └── fields/
 │           ├── Site_Key__c
-│           └── Secret_Key__c
+│           ├── Secret_Key__c
+│           ├── Captcha_Type__c
+│           ├── Score_Threshold__c
+│           ├── Default_Site_Id__c       # URL Display Feature
+│           └── Default_Site_Base_Url__c # URL Display Feature
 ├── classes/
 │   ├── CaseFormController.cls
 │   ├── CaseFormControllerTest.cls
@@ -448,6 +538,26 @@ force-app/main/default/
 ---
 
 ## Changelog
+
+### v0.4.5 (2026-01-29) - URL Display Feature
+- **Site dropdown** added to Form Detail editor (new/edit form views)
+  - Select per-form Site override or use org-wide default
+  - Sites loaded from active Salesforce Sites in the org
+- **Public URL display** with copy button in Form Detail view
+  - Shows computed public URL based on selected Site
+  - Warning message when no default Site is configured
+- **"Copy URL" row action** added to Form Manager list view
+  - Copies public form URL to clipboard with one click
+  - Toast feedback on success/failure
+- **Default Site configuration** saved during Setup Wizard (Step 2 → Step 3)
+  - Stores both Site ID and resolved base URL in `reCAPTCHA_Settings__c`
+- **"View Live" action** now uses correct public Site URL (not internal Salesforce URL)
+- **New custom fields:**
+  - `reCAPTCHA_Settings__c.Default_Site_Id__c` - Default Site ID for org
+  - `reCAPTCHA_Settings__c.Default_Site_Base_Url__c` - Cached base URL
+  - `Form__c.Site_Id__c` - Per-form Site override
+- **URL encoding** for form names with special characters
+- 137 Apex tests passing
 
 ### v0.4.4 (2026-01-29) - UX Improvements
 - **Setup Wizard Complete step**: Consolidated from 4 boxes to 2 boxes for cleaner UX
@@ -633,7 +743,7 @@ When creating the managed/unlocked package for AppExchange, include the followin
 |-----------|----------|-------------|
 | Custom Setting (Hierarchy) | `reCAPTCHA_Settings__c` | reCAPTCHA API keys and settings (Protected) |
 
-### Custom Fields - Form__c (8)
+### Custom Fields - Form__c (9)
 | Field | API Name |
 |-------|----------|
 | Form Name | `Form_Name__c` |
@@ -644,6 +754,7 @@ When creating the managed/unlocked package for AppExchange, include the followin
 | Enable File Upload | `Enable_File_Upload__c` |
 | Max File Size MB | `Max_File_Size_MB__c` |
 | Enable Captcha | `Enable_Captcha__c` |
+| Site Id | `Site_Id__c` |
 
 ### Custom Fields - Form_Field__c (6)
 | Field | API Name |
@@ -663,13 +774,15 @@ When creating the managed/unlocked package for AppExchange, include the followin
 | Form Id | `Form_Id__c` |
 | Timestamp | `Timestamp__c` |
 
-### Custom Fields - reCAPTCHA_Settings__c (4)
+### Custom Fields - reCAPTCHA_Settings__c (6)
 | Field | API Name |
 |-------|----------|
 | Site Key | `Site_Key__c` |
 | Secret Key | `Secret_Key__c` |
 | Captcha Type | `Captcha_Type__c` |
 | Score Threshold | `Score_Threshold__c` |
+| Default Site Id | `Default_Site_Id__c` |
+| Default Site Base Url | `Default_Site_Base_Url__c` |
 
 ### Apex Classes (8)
 | Class | Description |

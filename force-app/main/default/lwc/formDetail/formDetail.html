@@ -133,6 +133,73 @@
                                 field-level-help="Enable Google reCAPTCHA v2 to protect this form from spam and bot submissions. Requires reCAPTCHA keys to be configured in Custom Settings.">
                             </lightning-input>
                         </div>
+
+                        <!-- Site Selection -->
+                        <div class="slds-col slds-size_1-of-1 slds-p-bottom_small slds-p-top_medium">
+                            <lightning-combobox
+                                name="site"
+                                label="Site"
+                                placeholder="Use Default Site"
+                                options={siteOptions}
+                                value={form.siteId}
+                                onchange={handleSiteChange}
+                                field-level-help="Override the Site for this form's URL, or leave as default.">
+                            </lightning-combobox>
+                        </div>
+
+                        <!-- Public URL Display -->
+                        <div class="slds-col slds-size_1-of-1 slds-p-bottom_small slds-p-top_medium">
+                            <template if:true={computedPublicUrl}>
+                                <div class="slds-form-element">
+                                    <label class="slds-form-element__label">Public URL</label>
+                                    <div class="slds-form-element__control">
+                                        <div class="slds-grid slds-gutters_x-small">
+                                            <div class="slds-col slds-grow">
+                                                <lightning-input
+                                                    type="text"
+                                                    value={computedPublicUrl}
+                                                    readonly
+                                                    variant="label-hidden">
+                                                </lightning-input>
+                                            </div>
+                                            <div class="slds-col slds-no-flex">
+                                                <lightning-button-icon
+                                                    icon-name="utility:copy"
+                                                    alternative-text="Copy URL"
+                                                    title="Copy URL"
+                                                    onclick={handleCopyUrl}>
+                                                </lightning-button-icon>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </template>
+                            <template if:false={computedPublicUrl}>
+                                <template if:false={hasDefaultSite}>
+                                    <div class="slds-form-element">
+                                        <label class="slds-form-element__label">Public URL</label>
+                                        <div class="slds-form-element__control">
+                                            <p class="slds-text-color_weak slds-p-top_xx-small">
+                                                <lightning-icon icon-name="utility:warning" size="x-small" class="slds-m-right_xx-small"></lightning-icon>
+                                                No default Site configured. Run the Setup Wizard first.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </template>
+                                <template if:true={hasDefaultSite}>
+                                    <template if:false={form.formName}>
+                                        <div class="slds-form-element">
+                                            <label class="slds-form-element__label">Public URL</label>
+                                            <div class="slds-form-element__control">
+                                                <p class="slds-text-color_weak slds-p-top_xx-small">
+                                                    Enter a Form Name to see the public URL.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </template>
+                                </template>
+                            </template>
+                        </div>
                     </div>
                 </lightning-accordion-section>
 

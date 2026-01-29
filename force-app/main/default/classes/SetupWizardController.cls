@@ -972,6 +972,45 @@ public with sharing class SetupWizardController {
     }
 
     /**
+     * Save the default Site ID and base URL to org settings
+     * Called when user selects a Site in the Setup Wizard
+     * @param siteId The Salesforce Site ID to set as default
+     */
+    @AuraEnabled
+    public static void saveDefaultSite(String siteId) {
+        if (String.isBlank(siteId)) {
+            throw createException('Site ID is required');
+        }
+
+        try {
+            // Query Site to validate it exists
+            Site site = [SELECT Id, Name FROM Site WHERE Id = :siteId LIMIT 1];
+
+            // Get the base URL for this Site
+            String baseUrl = getSiteBaseUrl(site);
+
+            // Get or create org-level settings
+            reCAPTCHA_Settings__c settings = reCAPTCHA_Settings__c.getOrgDefaults();
+            if (settings == null || settings.Id == null) {
+                settings = new reCAPTCHA_Settings__c(
+                    SetupOwnerId = UserInfo.getOrganizationId()
+                );
+            }
+
+            settings.Default_Site_Id__c = siteId;
+            settings.Default_Site_Base_Url__c = baseUrl;
+            upsert settings;
+
+        } catch (QueryException e) {
+            ErrorLogger.logException(e, null);
+            throw createException('Invalid Site ID: Site not found');
+        } catch (Exception e) {
+            ErrorLogger.logException(e, null);
+            throw createException('Error saving default Site: ' + e.getMessage());
+        }
+    }
+
+    /**
      * Clear reCAPTCHA settings
      */
     @AuraEnabled

@@ -5,6 +5,8 @@ import getPicklistValues from '@salesforce/apex/FormAdminController.getPicklistV
 import isFormNameAvailable from '@salesforce/apex/FormAdminController.isFormNameAvailable';
 import saveForm from '@salesforce/apex/FormAdminController.saveForm';
 import saveFields from '@salesforce/apex/FormAdminController.saveFields';
+import getActiveSites from '@salesforce/apex/FormAdminController.getActiveSites';
+import getDefaultSiteInfo from '@salesforce/apex/FormAdminController.getDefaultSiteInfo';
 
 export default class FormDetail extends LightningElement {
     _formId;
@@ -32,7 +34,9 @@ export default class FormDetail extends LightningElement {
         enableFileUpload: false,
         maxFileSizeMB: 10,
         successMessage: '',
-        enableCaptcha: false
+        enableCaptcha: false,
+        siteId: null,
+        publicUrl: null
     };
 
     @track fields = [];
@@ -41,6 +45,9 @@ export default class FormDetail extends LightningElement {
     @track expandedFieldIndex = null;
     @track formNameError = '';
     @track hasUnsavedChanges = false;
+    @track sites = [];
+    @track defaultSiteId = null;
+    @track defaultBaseUrl = null;
 
     fieldTypeOptions = [];
     caseFieldOptions = [];
@@ -58,6 +65,25 @@ export default class FormDetail extends LightningElement {
             }));
         } else if (error) {
             this.showToast('Error', 'Failed to load picklist values', 'error');
+        }
+    }
+
+    @wire(getActiveSites)
+    wiredSites({ data, error }) {
+        if (data) {
+            this.sites = data;
+        } else if (error) {
+            console.error('Error loading sites:', error);
+        }
+    }
+
+    @wire(getDefaultSiteInfo)
+    wiredDefaultSiteInfo({ data, error }) {
+        if (data) {
+            this.defaultSiteId = data.siteId || null;
+            this.defaultBaseUrl = data.baseUrl || null;
+        } else if (error) {
+            console.error('Error loading default site info:', error);
         }
     }
 
@@ -85,7 +111,9 @@ export default class FormDetail extends LightningElement {
                         enableFileUpload: result.enableFileUpload || false,
                         maxFileSizeMB: result.maxFileSizeMB || 10,
                         successMessage: result.successMessage || '',
-                        enableCaptcha: result.enableCaptcha || false
+                        enableCaptcha: result.enableCaptcha || false,
+                        siteId: result.siteId || null,
+                        publicUrl: result.publicUrl || null
                     };
                     this.fields = (result.fields || []).map((f, index) => ({
                         ...f,
@@ -111,7 +139,9 @@ export default class FormDetail extends LightningElement {
                 enableFileUpload: false,
                 maxFileSizeMB: 10,
                 successMessage: '',
-                enableCaptcha: false
+                enableCaptcha: false,
+                siteId: null,
+                publicUrl: null
             };
             this.fields = [];
             this.isLoading = false;
@@ -151,6 +181,54 @@ export default class FormDetail extends LightningElement {
         return this.form.formName && this.form.title && !this.formNameError;
     }
 
+    get siteOptions() {
+        const options = [{ label: 'Use Default Site', value: '' }];
+        if (this.sites && this.sites.length > 0) {
+            this.sites.forEach(site => {
+                options.push({
+                    label: site.masterLabel,
+                    value: site.id
+                });
+            });
+        }
+        return options;
+    }
+
+    get computedPublicUrl() {
+        // If we have a saved publicUrl from the server, use it
+        if (this.form.publicUrl) {
+            return this.form.publicUrl;
+        }
+        // Otherwise compute it client-side for new/unsaved forms
+        const baseUrl = this.resolvedBaseUrl;
+        const formName = this.form.formName;
+        if (baseUrl && formName) {
+            const encodedFormName = encodeURIComponent(formName);
+            let url = baseUrl;
+            if (!url.endsWith('/')) {
+                url += '/';
+            }
+            return url + 'apex/CaseFormPage?form=' + encodedFormName;
+        }
+        return null;
+    }
+
+    get resolvedBaseUrl() {
+        // If form has a Site override, find its base URL
+        if (this.form.siteId && this.sites) {
+            const site = this.sites.find(s => s.id === this.form.siteId);
+            if (site && site.baseUrl) {
+                return site.baseUrl;
+            }
+        }
+        // Otherwise use default
+        return this.defaultBaseUrl;
+    }
+
+    get hasDefaultSite() {
+        return !!this.defaultBaseUrl;
+    }
+
     // Form field handlers
     handleFormNameChange(event) {
         const value = event.target.value;
@@ -188,6 +266,24 @@ export default class FormDetail extends LightningElement {
     handleCaptchaChange(event) {
         this.form.enableCaptcha = event.target.checked;
         this.hasUnsavedChanges = true;
+    }
+
+    handleSiteChange(event) {
+        this.form.siteId = event.detail.value || null;
+        // Clear the saved publicUrl so the computed one is used
+        this.form.publicUrl = null;
+        this.hasUnsavedChanges = true;
+    }
+
+    handleCopyUrl() {
+        const url = this.computedPublicUrl;
+        if (url) {
+            navigator.clipboard.writeText(url).then(() => {
+                this.showToast('Success', 'URL copied to clipboard', 'success');
+            }).catch(() => {
+                this.showToast('Error', 'Could not copy URL to clipboard', 'error');
+            });
+        }
     }
 
     handleSuccessMessageChange(event) {
@@ -370,7 +466,8 @@ export default class FormDetail extends LightningElement {
                 enableFileUpload: this.form.enableFileUpload,
                 maxFileSizeMB: this.form.maxFileSizeMB,
                 successMessage: this.form.successMessage,
-                enableCaptcha: this.form.enableCaptcha
+                enableCaptcha: this.form.enableCaptcha,
+                siteId: this.form.siteId
             };
 
             const formId = await saveForm({ formData: formData });
@@ -408,10 +505,11 @@ export default class FormDetail extends LightningElement {
     }
 
     handleViewLive() {
-        if (this.form.formName) {
-            const baseUrl = window.location.origin;
-            const formUrl = `${baseUrl}/apex/CaseFormPage?form=${this.form.formName}&preview=true`;
-            window.open(formUrl, '_blank');
+        const url = this.computedPublicUrl;
+        if (url) {
+            window.open(url + '&preview=true', '_blank');
+        } else {
+            this.showToast('Warning', 'No Site configured. Run the Setup Wizard to configure a default Site.', 'warning');
         }
     }
 

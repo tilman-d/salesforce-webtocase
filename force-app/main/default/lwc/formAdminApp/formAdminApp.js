@@ -55,6 +55,7 @@ const COLUMNS = [
                 { label: 'Edit', name: 'edit' },
                 { label: 'Toggle Active', name: 'toggle' },
                 { label: 'View Live', name: 'view' },
+                { label: 'Copy URL', name: 'copyUrl' },
                 { label: 'Delete', name: 'delete' }
             ]
         }
@@ -182,6 +183,9 @@ export default class FormAdminApp extends LightningElement {
             case 'view':
                 this.handleViewLive(row);
                 break;
+            case 'copyUrl':
+                this.handleCopyUrl(row);
+                break;
             case 'delete':
                 this.formToDelete = row;
                 this.showDeleteModal = true;
@@ -209,9 +213,24 @@ export default class FormAdminApp extends LightningElement {
 
     handleViewLive(row) {
         // Open the public form in a new tab with preview=true to bypass active check
-        const baseUrl = window.location.origin;
-        const formUrl = `${baseUrl}/apex/CaseFormPage?form=${row.formName}&preview=true`;
-        window.open(formUrl, '_blank');
+        if (row.publicUrl) {
+            window.open(row.publicUrl + '&preview=true', '_blank');
+        } else {
+            // Fallback if no public URL configured
+            this.showToast('Warning', 'No Site configured. Run the Setup Wizard to configure a default Site.', 'warning');
+        }
+    }
+
+    handleCopyUrl(row) {
+        if (row.publicUrl) {
+            navigator.clipboard.writeText(row.publicUrl).then(() => {
+                this.showToast('Success', 'URL copied to clipboard', 'success');
+            }).catch(() => {
+                this.showToast('Error', 'Could not copy URL to clipboard', 'error');
+            });
+        } else {
+            this.showToast('Warning', 'No URL available. Configure a default Site in Setup Wizard.', 'warning');
+        }
     }
 
     handleCloseDeleteModal() {

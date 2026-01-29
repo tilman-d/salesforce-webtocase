@@ -564,4 +564,188 @@ private class FormAdminControllerTest {
         System.assertEquals(false, wrapper.required, 'Required should default to false');
         System.assertEquals(0, wrapper.sortOrder, 'Sort order should default to 0');
     }
+
+    // ==================== Site-related Tests ====================
+
+    @isTest
+    static void testGetActiveSites() {
+        Test.startTest();
+        List<FormAdminController.SiteInfo> sites = FormAdminController.getActiveSites();
+        Test.stopTest();
+
+        // Sites may or may not exist in the test org, but method should not throw
+        System.assertNotEquals(null, sites, 'Sites list should not be null');
+    }
+
+    @isTest
+    static void testGetDefaultSiteInfo() {
+        Test.startTest();
+        Map<String, String> result = FormAdminController.getDefaultSiteInfo();
+        Test.stopTest();
+
+        // No default site configured in test, should return empty map or nulls
+        System.assertNotEquals(null, result, 'Result map should not be null');
+    }
+
+    @isTest
+    static void testGetDefaultSiteInfoWithSettings() {
+        // Insert settings with default site info
+        reCAPTCHA_Settings__c settings = new reCAPTCHA_Settings__c(
+            SetupOwnerId = UserInfo.getOrganizationId(),
+            Default_Site_Id__c = '0DM000000000001',
+            Default_Site_Base_Url__c = 'https://test.my.site.com/support'
+        );
+        insert settings;
+
+        Test.startTest();
+        Map<String, String> result = FormAdminController.getDefaultSiteInfo();
+        Test.stopTest();
+
+        System.assertEquals('0DM000000000001', result.get('siteId'), 'Site ID should match');
+        System.assertEquals('https://test.my.site.com/support', result.get('baseUrl'), 'Base URL should match');
+    }
+
+    @isTest
+    static void testBuildFormUrl() {
+        Test.startTest();
+
+        // Test with valid inputs
+        String url = FormAdminController.buildFormUrl('https://test.my.site.com/support', 'contact-us');
+        System.assertEquals('https://test.my.site.com/support/apex/CaseFormPage?form=contact-us', url,
+            'URL should be correctly formatted');
+
+        // Test with trailing slash
+        String url2 = FormAdminController.buildFormUrl('https://test.my.site.com/support/', 'contact-us');
+        System.assertEquals('https://test.my.site.com/support/apex/CaseFormPage?form=contact-us', url2,
+            'URL should handle trailing slash');
+
+        // Test URL encoding with special characters
+        String url3 = FormAdminController.buildFormUrl('https://test.my.site.com', 'my form');
+        System.assertEquals('https://test.my.site.com/apex/CaseFormPage?form=my+form', url3,
+            'URL should encode spaces');
+
+        // Test with blank base URL
+        String url4 = FormAdminController.buildFormUrl('', 'contact-us');
+        System.assertEquals(null, url4, 'Should return null for blank base URL');
+
+        // Test with blank form name
+        String url5 = FormAdminController.buildFormUrl('https://test.my.site.com', '');
+        System.assertEquals(null, url5, 'Should return null for blank form name');
+
+        // Test with null inputs
+        String url6 = FormAdminController.buildFormUrl(null, null);
+        System.assertEquals(null, url6, 'Should return null for null inputs');
+
+        Test.stopTest();
+    }
+
+    @isTest
+    static void testSiteInfoWrapper() {
+        FormAdminController.SiteInfo info = new FormAdminController.SiteInfo();
+        info.id = 'testId';
+        info.name = 'TestSite';
+        info.masterLabel = 'Test Site Label';
+        info.baseUrl = 'https://test.my.site.com';
+
+        System.assertEquals('testId', info.id, 'id should match');
+        System.assertEquals('TestSite', info.name, 'name should match');
+        System.assertEquals('Test Site Label', info.masterLabel, 'masterLabel should match');
+        System.assertEquals('https://test.my.site.com', info.baseUrl, 'baseUrl should match');
+    }
+
+    @isTest
+    static void testFormWrapperWithSiteId() {
+        // Create a form with Site ID
+        Form__c form = new Form__c(
+            Form_Name__c = 'test-site-form',
+            Title__c = 'Test Site Form',
+            Active__c = true,
+            Site_Id__c = '0DM000000000001'
+        );
+        insert form;
+
+        Test.startTest();
+        FormAdminController.FormWrapper wrapper = FormAdminController.getFormWithFields(form.Id);
+        Test.stopTest();
+
+        System.assertEquals('0DM000000000001', wrapper.siteId, 'Site ID should match');
+    }
+
+    @isTest
+    static void testSaveFormWithSiteId() {
+        Map<String, Object> formData = new Map<String, Object>();
+        formData.put('id', null);
+        formData.put('formName', 'site-override-form');
+        formData.put('title', 'Site Override Form');
+        formData.put('description', null);
+        formData.put('active', true);
+        formData.put('enableFileUpload', false);
+        formData.put('maxFileSizeMB', 10);
+        formData.put('successMessage', null);
+        formData.put('enableCaptcha', false);
+        formData.put('siteId', '0DM000000000001');
+
+        Test.startTest();
+        String formId = FormAdminController.saveForm(formData);
+        Test.stopTest();
+
+        Form__c savedForm = [SELECT Site_Id__c FROM Form__c WHERE Id = :formId];
+        System.assertEquals('0DM000000000001', savedForm.Site_Id__c, 'Site ID should be saved');
+    }
+
+    @isTest
+    static void testSaveFormClearSiteId() {
+        // First create a form with Site ID
+        Form__c form = new Form__c(
+            Form_Name__c = 'clear-site-form',
+            Title__c = 'Clear Site Form',
+            Site_Id__c = '0DM000000000001'
+        );
+        insert form;
+
+        // Now update it with empty siteId to clear it
+        Map<String, Object> formData = new Map<String, Object>();
+        formData.put('id', form.Id);
+        formData.put('formName', 'clear-site-form');
+        formData.put('title', 'Clear Site Form');
+        formData.put('description', null);
+        formData.put('active', false);
+        formData.put('enableFileUpload', false);
+        formData.put('maxFileSizeMB', 10);
+        formData.put('successMessage', null);
+        formData.put('enableCaptcha', false);
+        formData.put('siteId', '');  // Empty string should clear the Site ID
+
+        Test.startTest();
+        FormAdminController.saveForm(formData);
+        Test.stopTest();
+
+        Form__c updatedForm = [SELECT Site_Id__c FROM Form__c WHERE Id = :form.Id];
+        System.assertEquals(null, updatedForm.Site_Id__c, 'Site ID should be cleared');
+    }
+
+    @isTest
+    static void testGetFormsWithPublicUrl() {
+        // Insert default site settings
+        reCAPTCHA_Settings__c settings = new reCAPTCHA_Settings__c(
+            SetupOwnerId = UserInfo.getOrganizationId(),
+            Default_Site_Id__c = '0DM000000000001',
+            Default_Site_Base_Url__c = 'https://test.my.site.com/support'
+        );
+        insert settings;
+
+        Test.startTest();
+        List<FormAdminController.FormWrapper> forms = FormAdminController.getForms();
+        Test.stopTest();
+
+        // Should have forms from TestSetup
+        System.assert(forms.size() > 0, 'Should have forms');
+
+        // All forms should have public URLs computed
+        for (FormAdminController.FormWrapper fw : forms) {
+            System.assertNotEquals(null, fw.publicUrl, 'Public URL should be computed for form: ' + fw.formName);
+            System.assert(fw.publicUrl.contains('apex/CaseFormPage'), 'Public URL should contain page path');
+            System.assert(fw.publicUrl.contains('form=' + fw.formName), 'Public URL should contain form name');
+        }
+    }
 }

@@ -9,6 +9,7 @@ import createSampleForm from '@salesforce/apex/SetupWizardController.createSampl
 import getPublicUrl from '@salesforce/apex/SetupWizardController.getPublicUrl';
 import getReCaptchaSettings from '@salesforce/apex/SetupWizardController.getReCaptchaSettings';
 import saveReCaptchaSettings from '@salesforce/apex/SetupWizardController.saveReCaptchaSettings';
+import saveDefaultSite from '@salesforce/apex/SetupWizardController.saveDefaultSite';
 
 const STEPS = [
     { label: 'Welcome', value: '1' },
@@ -504,6 +505,13 @@ export default class SetupWizard extends LightningElement {
             await this.loadSites();
         } else if (step === 2) {
             // Moving from Select Site to Configure
+            // Save the selected Site as the default before proceeding
+            try {
+                await saveDefaultSite({ siteId: this.selectedSiteId });
+            } catch (error) {
+                this.showToast('Error', this.getErrorMessage(error), 'error');
+                return;
+            }
             this.currentStep = '3';
             this.autoConfigComplete = false;
             this.configResults = [];
