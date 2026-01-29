@@ -524,4 +524,367 @@ private class SetupWizardControllerTest {
         System.assertEquals('Test User', summary.configuredBy, 'configuredBy should match');
         System.assertEquals(2, summary.permissionsApplied.size(), 'Should have 2 permissions applied');
     }
+
+    // ==================== reCAPTCHA Settings Tests ====================
+
+    /**
+     * Test ReCaptchaSettingsResult wrapper default values
+     */
+    @isTest
+    static void testReCaptchaSettingsResultWrapper() {
+        SetupWizardController.ReCaptchaSettingsResult result = new SetupWizardController.ReCaptchaSettingsResult();
+
+        System.assertEquals(false, result.isConfigured, 'isConfigured should default to false');
+        System.assertEquals(false, result.hasSecretKey, 'hasSecretKey should default to false');
+        System.assertEquals(null, result.siteKey, 'siteKey should be null');
+        System.assertEquals(null, result.errorMessage, 'errorMessage should be null');
+        System.assertEquals('V2_Checkbox', result.captchaType, 'captchaType should default to V2_Checkbox');
+        System.assertEquals(0.3, result.scoreThreshold, 'scoreThreshold should default to 0.3');
+    }
+
+    /**
+     * Test getReCaptchaSettings - no settings exist
+     */
+    @isTest
+    static void testGetReCaptchaSettingsEmpty() {
+        Test.startTest();
+        SetupWizardController.ReCaptchaSettingsResult result = SetupWizardController.getReCaptchaSettings();
+        Test.stopTest();
+
+        System.assertEquals(false, result.isConfigured, 'Should not be configured');
+        System.assertEquals(null, result.siteKey, 'Site key should be null');
+        System.assertEquals(false, result.hasSecretKey, 'Should not have secret key');
+    }
+
+    /**
+     * Test getReCaptchaSettings - with existing settings
+     */
+    @isTest
+    static void testGetReCaptchaSettingsExisting() {
+        // Insert settings
+        reCAPTCHA_Settings__c settings = new reCAPTCHA_Settings__c(
+            SetupOwnerId = UserInfo.getOrganizationId(),
+            Site_Key__c = 'ExistingSiteKey123',
+            Secret_Key__c = 'ExistingSecretKey456',
+            Captcha_Type__c = 'V3_Score',
+            Score_Threshold__c = 0.5
+        );
+        insert settings;
+
+        Test.startTest();
+        SetupWizardController.ReCaptchaSettingsResult result = SetupWizardController.getReCaptchaSettings();
+        Test.stopTest();
+
+        System.assertEquals(true, result.isConfigured, 'Should be configured');
+        System.assertEquals('ExistingSiteKey123', result.siteKey, 'Site key should match');
+        System.assertEquals(true, result.hasSecretKey, 'Should indicate secret key exists');
+        System.assertEquals('V3_Score', result.captchaType, 'Captcha type should match');
+        System.assertEquals(0.5, result.scoreThreshold, 'Score threshold should match');
+        // Note: We don't expose the actual secret key value
+    }
+
+    /**
+     * Test saveReCaptchaSettings - valid keys with type and threshold
+     */
+    @isTest
+    static void testSaveReCaptchaSettingsValid() {
+        Test.startTest();
+        SetupWizardController.ReCaptchaSettingsResult result = SetupWizardController.saveReCaptchaSettings(
+            '6LeTestSiteKey123',
+            '6LeTestSecretKey456',
+            'V3_Score',
+            0.5
+        );
+        Test.stopTest();
+
+        System.assertEquals(true, result.isConfigured, 'Should be configured');
+        System.assertEquals('6LeTestSiteKey123', result.siteKey, 'Site key should match');
+        System.assertEquals(true, result.hasSecretKey, 'Should indicate secret key exists');
+        System.assertEquals('V3_Score', result.captchaType, 'Captcha type should match');
+        System.assertEquals(0.5, result.scoreThreshold, 'Score threshold should match');
+        System.assertEquals(null, result.errorMessage, 'Should have no error message');
+
+        // Verify settings were saved
+        reCAPTCHA_Settings__c settings = reCAPTCHA_Settings__c.getOrgDefaults();
+        System.assertEquals('6LeTestSiteKey123', settings.Site_Key__c, 'Site key should be saved');
+        System.assertEquals('6LeTestSecretKey456', settings.Secret_Key__c, 'Secret key should be saved');
+        System.assertEquals('V3_Score', settings.Captcha_Type__c, 'Captcha type should be saved');
+        System.assertEquals(0.5, settings.Score_Threshold__c, 'Score threshold should be saved');
+    }
+
+    /**
+     * Test saveReCaptchaSettings - partial update (Site Key only)
+     */
+    @isTest
+    static void testSaveReCaptchaSettingsPartialSiteKey() {
+        // First, insert initial settings
+        reCAPTCHA_Settings__c settings = new reCAPTCHA_Settings__c(
+            SetupOwnerId = UserInfo.getOrganizationId(),
+            Site_Key__c = 'OldSiteKey',
+            Secret_Key__c = 'OldSecretKey',
+            Captcha_Type__c = 'V2_Checkbox',
+            Score_Threshold__c = 0.3
+        );
+        insert settings;
+
+        Test.startTest();
+        // Update only Site Key, leave Secret Key blank to preserve existing
+        SetupWizardController.ReCaptchaSettingsResult result = SetupWizardController.saveReCaptchaSettings(
+            'NewSiteKey',
+            '',  // Empty - should preserve existing
+            null,  // Null - should preserve existing
+            null   // Null - should preserve existing
+        );
+        Test.stopTest();
+
+        System.assertEquals(true, result.isConfigured, 'Should be configured');
+        System.assertEquals('NewSiteKey', result.siteKey, 'Site key should be updated');
+
+        // Verify secret key was preserved
+        reCAPTCHA_Settings__c updatedSettings = reCAPTCHA_Settings__c.getOrgDefaults();
+        System.assertEquals('NewSiteKey', updatedSettings.Site_Key__c, 'Site key should be updated');
+        System.assertEquals('OldSecretKey', updatedSettings.Secret_Key__c, 'Secret key should be preserved');
+        System.assertEquals('V2_Checkbox', updatedSettings.Captcha_Type__c, 'Captcha type should be preserved');
+    }
+
+    /**
+     * Test saveReCaptchaSettings - partial update (Secret Key only)
+     */
+    @isTest
+    static void testSaveReCaptchaSettingsPartialSecretKey() {
+        // First, insert initial settings
+        reCAPTCHA_Settings__c settings = new reCAPTCHA_Settings__c(
+            SetupOwnerId = UserInfo.getOrganizationId(),
+            Site_Key__c = 'OldSiteKey',
+            Secret_Key__c = 'OldSecretKey'
+        );
+        insert settings;
+
+        Test.startTest();
+        // Update only Secret Key, leave Site Key blank to preserve existing
+        SetupWizardController.ReCaptchaSettingsResult result = SetupWizardController.saveReCaptchaSettings(
+            '',  // Empty - should preserve existing
+            'NewSecretKey',
+            null,
+            null
+        );
+        Test.stopTest();
+
+        System.assertEquals(true, result.isConfigured, 'Should be configured');
+
+        // Verify site key was preserved and secret key was updated
+        reCAPTCHA_Settings__c updatedSettings = reCAPTCHA_Settings__c.getOrgDefaults();
+        System.assertEquals('OldSiteKey', updatedSettings.Site_Key__c, 'Site key should be preserved');
+        System.assertEquals('NewSecretKey', updatedSettings.Secret_Key__c, 'Secret key should be updated');
+    }
+
+    /**
+     * Test saveReCaptchaSettings - field length validation (Site Key too long)
+     */
+    @isTest
+    static void testSaveReCaptchaSettingsSiteKeyTooLong() {
+        // Create a string longer than 255 characters
+        String longKey = 'a'.repeat(256);
+
+        Test.startTest();
+        SetupWizardController.ReCaptchaSettingsResult result = SetupWizardController.saveReCaptchaSettings(
+            longKey,
+            'ValidSecretKey',
+            null,
+            null
+        );
+        Test.stopTest();
+
+        System.assertEquals(false, result.isConfigured, 'Should not be configured');
+        System.assert(result.errorMessage.contains('255'), 'Should mention 255 character limit');
+    }
+
+    /**
+     * Test saveReCaptchaSettings - field length validation (Secret Key too long)
+     */
+    @isTest
+    static void testSaveReCaptchaSettingsSecretKeyTooLong() {
+        // Create a string longer than 255 characters
+        String longKey = 'b'.repeat(256);
+
+        Test.startTest();
+        SetupWizardController.ReCaptchaSettingsResult result = SetupWizardController.saveReCaptchaSettings(
+            'ValidSiteKey',
+            longKey,
+            null,
+            null
+        );
+        Test.stopTest();
+
+        System.assertEquals(false, result.isConfigured, 'Should not be configured');
+        System.assert(result.errorMessage.contains('255'), 'Should mention 255 character limit');
+    }
+
+    /**
+     * Test saveReCaptchaSettings - update existing settings
+     */
+    @isTest
+    static void testSaveReCaptchaSettingsUpdate() {
+        // First, insert initial settings
+        reCAPTCHA_Settings__c settings = new reCAPTCHA_Settings__c(
+            SetupOwnerId = UserInfo.getOrganizationId(),
+            Site_Key__c = 'OldSiteKey',
+            Secret_Key__c = 'OldSecretKey'
+        );
+        insert settings;
+
+        Test.startTest();
+        SetupWizardController.ReCaptchaSettingsResult result = SetupWizardController.saveReCaptchaSettings(
+            'NewSiteKey',
+            'NewSecretKey',
+            'V2_Invisible',
+            null
+        );
+        Test.stopTest();
+
+        System.assertEquals(true, result.isConfigured, 'Should be configured');
+        System.assertEquals('NewSiteKey', result.siteKey, 'Site key should be updated');
+        System.assertEquals('V2_Invisible', result.captchaType, 'Captcha type should be updated');
+
+        // Verify only one record exists (upsert behavior)
+        List<reCAPTCHA_Settings__c> allSettings = [SELECT Id FROM reCAPTCHA_Settings__c];
+        System.assertEquals(1, allSettings.size(), 'Should still have only one record');
+    }
+
+    /**
+     * Test clearReCaptchaSettings
+     */
+    @isTest
+    static void testClearReCaptchaSettings() {
+        // First, save some settings
+        reCAPTCHA_Settings__c settings = new reCAPTCHA_Settings__c(
+            SetupOwnerId = UserInfo.getOrganizationId(),
+            Site_Key__c = 'TestKey',
+            Secret_Key__c = 'TestSecret'
+        );
+        insert settings;
+
+        Test.startTest();
+        SetupWizardController.ReCaptchaSettingsResult result = SetupWizardController.clearReCaptchaSettings();
+        Test.stopTest();
+
+        System.assertEquals(false, result.isConfigured, 'Should not be configured after clear');
+        System.assertEquals(false, result.hasSecretKey, 'Should not have secret key after clear');
+        System.assertEquals(null, result.siteKey, 'Site key should be null after clear');
+
+        // Verify settings were cleared
+        reCAPTCHA_Settings__c clearedSettings = reCAPTCHA_Settings__c.getOrgDefaults();
+        System.assertEquals(null, clearedSettings.Site_Key__c, 'Site key should be null');
+        System.assertEquals(null, clearedSettings.Secret_Key__c, 'Secret key should be null');
+    }
+
+    /**
+     * Test clearReCaptchaSettings - when no settings exist
+     */
+    @isTest
+    static void testClearReCaptchaSettingsEmpty() {
+        Test.startTest();
+        SetupWizardController.ReCaptchaSettingsResult result = SetupWizardController.clearReCaptchaSettings();
+        Test.stopTest();
+
+        System.assertEquals(false, result.isConfigured, 'Should not be configured');
+        System.assertEquals(null, result.errorMessage, 'Should have no error');
+    }
+
+    /**
+     * Test saveReCaptchaSettings - trimming whitespace
+     */
+    @isTest
+    static void testSaveReCaptchaSettingsTrimsWhitespace() {
+        Test.startTest();
+        SetupWizardController.ReCaptchaSettingsResult result = SetupWizardController.saveReCaptchaSettings(
+            '  SiteKeyWithSpaces  ',
+            '  SecretKeyWithSpaces  ',
+            null,
+            null
+        );
+        Test.stopTest();
+
+        System.assertEquals(true, result.isConfigured, 'Should be configured');
+
+        // Verify keys were trimmed
+        reCAPTCHA_Settings__c settings = reCAPTCHA_Settings__c.getOrgDefaults();
+        System.assertEquals('SiteKeyWithSpaces', settings.Site_Key__c, 'Site key should be trimmed');
+        System.assertEquals('SecretKeyWithSpaces', settings.Secret_Key__c, 'Secret key should be trimmed');
+    }
+
+    /**
+     * Test saveReCaptchaSettings - invalid captcha type
+     */
+    @isTest
+    static void testSaveReCaptchaSettingsInvalidCaptchaType() {
+        Test.startTest();
+        SetupWizardController.ReCaptchaSettingsResult result = SetupWizardController.saveReCaptchaSettings(
+            'ValidSiteKey',
+            'ValidSecretKey',
+            'InvalidType',
+            null
+        );
+        Test.stopTest();
+
+        System.assertEquals(false, result.isConfigured, 'Should not be configured');
+        System.assert(result.errorMessage.contains('Invalid captcha type'), 'Should mention invalid captcha type');
+    }
+
+    /**
+     * Test saveReCaptchaSettings - score threshold out of range (too high)
+     */
+    @isTest
+    static void testSaveReCaptchaSettingsScoreThresholdTooHigh() {
+        Test.startTest();
+        SetupWizardController.ReCaptchaSettingsResult result = SetupWizardController.saveReCaptchaSettings(
+            'ValidSiteKey',
+            'ValidSecretKey',
+            'V3_Score',
+            1.5  // Invalid - must be 0.0-1.0
+        );
+        Test.stopTest();
+
+        System.assertEquals(false, result.isConfigured, 'Should not be configured');
+        System.assert(result.errorMessage.contains('threshold'), 'Should mention threshold range');
+    }
+
+    /**
+     * Test saveReCaptchaSettings - score threshold out of range (negative)
+     */
+    @isTest
+    static void testSaveReCaptchaSettingsScoreThresholdNegative() {
+        Test.startTest();
+        SetupWizardController.ReCaptchaSettingsResult result = SetupWizardController.saveReCaptchaSettings(
+            'ValidSiteKey',
+            'ValidSecretKey',
+            'V3_Score',
+            -0.5  // Invalid - must be 0.0-1.0
+        );
+        Test.stopTest();
+
+        System.assertEquals(false, result.isConfigured, 'Should not be configured');
+        System.assert(result.errorMessage.contains('threshold'), 'Should mention threshold range');
+    }
+
+    /**
+     * Test saveReCaptchaSettings - v2 Invisible type
+     */
+    @isTest
+    static void testSaveReCaptchaSettingsV2Invisible() {
+        Test.startTest();
+        SetupWizardController.ReCaptchaSettingsResult result = SetupWizardController.saveReCaptchaSettings(
+            'InvisibleSiteKey',
+            'InvisibleSecretKey',
+            'V2_Invisible',
+            null
+        );
+        Test.stopTest();
+
+        System.assertEquals(true, result.isConfigured, 'Should be configured');
+        System.assertEquals('V2_Invisible', result.captchaType, 'Captcha type should be V2_Invisible');
+
+        reCAPTCHA_Settings__c settings = reCAPTCHA_Settings__c.getOrgDefaults();
+        System.assertEquals('V2_Invisible', settings.Captcha_Type__c, 'Type should be saved');
+    }
 }

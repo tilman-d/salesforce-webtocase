@@ -86,24 +86,26 @@ Access via the **Form Manager** tab in Salesforce.
 ### Post-Install Setup Wizard
 Access via the **Setup Wizard** tab or the **Web-to-Case Forms** app in the App Launcher.
 
-**5-Step Wizard Flow:**
+**6-Step Wizard Flow:**
 1. **Welcome** - Precondition checks (My Domain, admin permissions, Sites enabled)
 2. **Select Site** - Choose from existing Sites or get instructions to create one
 3. **Configure** - Auto-configure Guest User object/field permissions with security acknowledgment
 4. **Verify** - Manual configuration instructions for Apex class and VF page access with validation
-5. **Complete** - Create sample form, test form, view public URL, link to Form Manager
+5. **reCAPTCHA** - Configure Google reCAPTCHA API keys (optional, can skip)
+6. **Complete** - Create sample form, test form, view public URL, link to Form Manager
 
 **Features:**
 - Automatic detection of active Salesforce Sites
 - One-click permission configuration for Guest User profile
 - Support for both Enhanced Profile UI and Classic Profile UI instructions
 - Validation to ensure all permissions are correctly configured
+- **reCAPTCHA configuration UI** - Enter Site Key and Secret Key without Anonymous Apex
 - Sample "Contact Support" form creation
 - Dynamic public URL generation (works with Enhanced Domains)
 
 ### Apex Classes
-- **SetupWizardController** - Site detection, permission configuration, validation, sample form creation
-- **SetupWizardControllerTest** - Unit tests with coverage
+- **SetupWizardController** - Site detection, permission configuration, validation, sample form creation, reCAPTCHA settings management
+- **SetupWizardControllerTest** - Unit tests with coverage (41 tests)
 
 ### LWC Components
 - **setupWizard** - Multi-step wizard with progress indicator
@@ -171,13 +173,21 @@ Use this checklist to verify reCAPTCHA integration in your org:
 - [ ] Add your Salesforce Site domain (e.g., `yourorg.my.salesforce-sites.com`)
 - [ ] Copy the **Site Key** and **Secret Key**
 
-### 2. Add Keys to Salesforce
+### 2. Add Keys to Salesforce (via Setup Wizard)
 
-- [ ] In Salesforce, go to **Setup** → **Custom Settings**
-- [ ] Find **reCAPTCHA Settings** and click **Manage**
-- [ ] Click **New** (at org level)
+- [ ] Go to **Setup Wizard** tab (or run the wizard from App Launcher → "Web-to-Case Forms")
+- [ ] If you already completed setup, navigate to Step 5 (reCAPTCHA)
 - [ ] Enter your **Site Key** and **Secret Key**
-- [ ] Click **Save**
+- [ ] Click **Save reCAPTCHA Settings**
+- [ ] Proceed to Complete step
+
+**Alternative (Anonymous Apex):**
+```apex
+reCAPTCHA_Settings__c settings = reCAPTCHA_Settings__c.getOrgDefaults();
+settings.Site_Key__c = 'YOUR_SITE_KEY_HERE';
+settings.Secret_Key__c = 'YOUR_SECRET_KEY_HERE';
+upsert settings;
+```
 
 ### 3. Create a Test Form with CAPTCHA
 
@@ -423,6 +433,25 @@ force-app/main/default/
 
 ## Changelog
 
+### v0.4.2 (2026-01-29) - reCAPTCHA v3 Support & UX Improvements
+- **reCAPTCHA v3 Score-based** support added alongside v2 Checkbox and v2 Invisible
+- **reCAPTCHA Type selector** in Setup Wizard with clear descriptions for each type
+- **Simplified Score Threshold UX** - removed confusing technical input, uses sensible default (0.3)
+- Admins can still adjust threshold via Setup → Custom Metadata Types if needed
+- Updated `reCAPTCHA_Settings__c` with `Captcha_Type__c` and `Score_Threshold__c` fields
+- Server-side v3 score verification with configurable threshold
+- Client-side v3 integration with invisible badge
+
+### v0.4.1 (2026-01-29) - Setup Wizard reCAPTCHA Configuration
+- **Added Step 5: reCAPTCHA** to Setup Wizard (wizard now has 6 steps)
+- Admin-friendly UI for configuring reCAPTCHA API keys without Anonymous Apex
+- Partial updates supported (update Site Key or Secret Key independently)
+- Input validation (max 255 chars, whitespace trimming)
+- "Skip for Now" option for users who don't need CAPTCHA
+- Warning on Complete step if reCAPTCHA was skipped
+- 11 new unit tests for reCAPTCHA settings (41 total in SetupWizardControllerTest)
+- 114 total tests passing across all controllers
+
 ### v0.4.0 (2026-01-28) - Phase 3: reCAPTCHA Integration
 - Google reCAPTCHA v2 "I'm not a robot" checkbox integration
 - Per-form CAPTCHA toggle (`Enable_Captcha__c` field)
@@ -435,7 +464,7 @@ force-app/main/default/
 - 88% code coverage on CaseFormController
 
 ### v0.3.0 (2026-01-28) - Phase 2: Setup Wizard
-- 5-step post-install setup wizard
+- 5-step post-install setup wizard (now 6 steps with reCAPTCHA config)
 - Automatic Guest User permission configuration
 - Site detection and selection
 - Manual configuration instructions (Enhanced + Classic Profile UI)
@@ -464,6 +493,41 @@ force-app/main/default/
 - CaseFormPage Visualforce page
 - Basic styling and client-side validation
 - Error logging utility
+
+---
+
+## Manual Testing Still Needed
+
+The following items require manual verification before release:
+
+### reCAPTCHA v3 Testing
+- [ ] Create reCAPTCHA v3 keys at Google Admin Console (select "v3")
+- [ ] Configure v3 in Setup Wizard (select "v3 Score-based" type)
+- [ ] Test form submission with v3 - verify invisible badge appears
+- [ ] Verify low-score submissions are blocked (use VPN/incognito to simulate bot-like behavior)
+- [ ] Test that default threshold (0.3) works correctly
+- [ ] Optionally: adjust threshold via Custom Metadata and verify it takes effect
+
+### reCAPTCHA Type Switching
+- [ ] Test switching between v2 Checkbox, v2 Invisible, and v3 Score-based
+- [ ] Verify each type renders correctly on the public form
+- [ ] Verify form submission works with each type
+
+### Setup Wizard End-to-End
+- [ ] Fresh org: complete full wizard flow from step 1 to 6
+- [ ] Verify precondition checks work correctly
+- [ ] Verify Site selection works
+- [ ] Verify permission configuration works
+- [ ] Verify validation step catches missing permissions
+- [ ] Verify reCAPTCHA configuration saves correctly
+- [ ] Verify sample form creation works
+- [ ] Test the public form URL from the Complete step
+
+### Form Manager
+- [ ] Create new form with CAPTCHA enabled
+- [ ] Edit existing form - toggle CAPTCHA on/off
+- [ ] Verify "View Live" button opens correct URL
+- [ ] Test form field reordering
 
 ---
 
@@ -499,3 +563,195 @@ force-app/main/default/
 - Track form views, submissions, abandonment
 - Success/error rate metrics
 - Time-to-submit analytics
+
+---
+
+## AppExchange Package Metadata
+
+When creating the managed/unlocked package for AppExchange, include the following metadata components:
+
+### Custom Objects (4)
+| Component | API Name | Description |
+|-----------|----------|-------------|
+| Custom Object | `Form__c` | Form configuration |
+| Custom Object | `Form_Field__c` | Form field definitions |
+| Custom Object | `Error_Log__c` | Error logging |
+| Custom Metadata Type | `reCAPTCHA_Settings__c` | reCAPTCHA API keys and settings |
+
+### Custom Fields - Form__c (8)
+| Field | API Name |
+|-------|----------|
+| Form Name | `Form_Name__c` |
+| Title | `Title__c` |
+| Description | `Description__c` |
+| Success Message | `Success_Message__c` |
+| Active | `Active__c` |
+| Enable File Upload | `Enable_File_Upload__c` |
+| Max File Size MB | `Max_File_Size_MB__c` |
+| Enable Captcha | `Enable_Captcha__c` |
+
+### Custom Fields - Form_Field__c (6)
+| Field | API Name |
+|-------|----------|
+| Form (Master-Detail) | `Form__c` |
+| Field Label | `Field_Label__c` |
+| Field Type | `Field_Type__c` |
+| Case Field | `Case_Field__c` |
+| Required | `Required__c` |
+| Sort Order | `Sort_Order__c` |
+
+### Custom Fields - Error_Log__c (4)
+| Field | API Name |
+|-------|----------|
+| Error Message | `Error_Message__c` |
+| Stack Trace | `Stack_Trace__c` |
+| Form Id | `Form_Id__c` |
+| Timestamp | `Timestamp__c` |
+
+### Custom Fields - reCAPTCHA_Settings__c (4)
+| Field | API Name |
+|-------|----------|
+| Site Key | `Site_Key__c` |
+| Secret Key | `Secret_Key__c` |
+| Captcha Type | `Captcha_Type__c` |
+| Score Threshold | `Score_Threshold__c` |
+
+### Apex Classes (8)
+| Class | Description |
+|-------|-------------|
+| `CaseFormController` | Public form controller |
+| `CaseFormControllerTest` | Test class |
+| `ErrorLogger` | Error logging utility |
+| `ErrorLoggerTest` | Test class |
+| `FormAdminController` | Form Manager admin controller |
+| `FormAdminControllerTest` | Test class |
+| `SetupWizardController` | Setup Wizard controller |
+| `SetupWizardControllerTest` | Test class |
+
+### Lightning Web Components (3)
+| Component | Description |
+|-----------|-------------|
+| `formAdminApp` | Form Manager main container |
+| `formDetail` | Form editor with field management |
+| `setupWizard` | Post-install setup wizard |
+
+### Visualforce Pages (1)
+| Page | Description |
+|------|-------------|
+| `CaseFormPage` | Public form page |
+
+### Static Resources (2)
+| Resource | Description |
+|----------|-------------|
+| `caseFormStyles` | Form CSS styling |
+| `caseFormScript` | Form JavaScript |
+
+### Lightning App (1)
+| App | API Name |
+|-----|----------|
+| Web-to-Case Forms | `Web_to_Case_Forms` |
+
+### Lightning Pages (FlexiPages) (2)
+| Page | API Name |
+|------|----------|
+| Form Manager | `Form_Manager` |
+| Setup Wizard | `Setup_Wizard` |
+
+### Custom Tabs (2)
+| Tab | API Name |
+|-----|----------|
+| Form Manager | `Form_Manager` |
+| Setup Wizard | `Setup_Wizard` |
+
+### Permission Sets (1)
+| Permission Set | API Name |
+|----------------|----------|
+| Web-to-Case Admin | `Web_to_Case_Admin` |
+
+### Remote Site Settings (1)
+| Remote Site | URL | Description |
+|-------------|-----|-------------|
+| Google_reCAPTCHA | `https://www.google.com` | reCAPTCHA verification API |
+
+### Package.xml Example
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<Package xmlns="http://soap.sforce.com/2006/04/metadata">
+    <types>
+        <members>Form__c</members>
+        <members>Form_Field__c</members>
+        <members>Error_Log__c</members>
+        <name>CustomObject</name>
+    </types>
+    <types>
+        <members>reCAPTCHA_Settings__c</members>
+        <name>CustomMetadata</name>
+    </types>
+    <types>
+        <members>CaseFormController</members>
+        <members>CaseFormControllerTest</members>
+        <members>ErrorLogger</members>
+        <members>ErrorLoggerTest</members>
+        <members>FormAdminController</members>
+        <members>FormAdminControllerTest</members>
+        <members>SetupWizardController</members>
+        <members>SetupWizardControllerTest</members>
+        <name>ApexClass</name>
+    </types>
+    <types>
+        <members>formAdminApp</members>
+        <members>formDetail</members>
+        <members>setupWizard</members>
+        <name>LightningComponentBundle</name>
+    </types>
+    <types>
+        <members>CaseFormPage</members>
+        <name>ApexPage</name>
+    </types>
+    <types>
+        <members>caseFormStyles</members>
+        <members>caseFormScript</members>
+        <name>StaticResource</name>
+    </types>
+    <types>
+        <members>Web_to_Case_Forms</members>
+        <name>CustomApplication</name>
+    </types>
+    <types>
+        <members>Form_Manager</members>
+        <members>Setup_Wizard</members>
+        <name>FlexiPage</name>
+    </types>
+    <types>
+        <members>Form_Manager</members>
+        <members>Setup_Wizard</members>
+        <name>CustomTab</name>
+    </types>
+    <types>
+        <members>Web_to_Case_Admin</members>
+        <name>PermissionSet</name>
+    </types>
+    <types>
+        <members>Google_reCAPTCHA</members>
+        <name>RemoteSiteSetting</name>
+    </types>
+    <version>59.0</version>
+</Package>
+```
+
+### Notes for Packaging
+
+1. **Custom Metadata Type**: `reCAPTCHA_Settings__c` should be included as a Custom Metadata Type, not a Custom Setting. The records themselves (API keys) are NOT included - users configure these post-install.
+
+2. **Remote Site Setting**: Include `Google_reCAPTCHA` for reCAPTCHA verification callouts.
+
+3. **Permission Set**: `Web_to_Case_Admin` grants access to all admin functionality. Assign to users who need to manage forms.
+
+4. **Post-Install Configuration Required**:
+   - Create/select a Salesforce Site
+   - Configure Guest User permissions (via Setup Wizard)
+   - Add reCAPTCHA API keys (via Setup Wizard)
+   - Grant Apex class and VF page access to Guest User profile
+
+5. **Test Coverage**: All Apex classes have >75% code coverage with dedicated test classes.

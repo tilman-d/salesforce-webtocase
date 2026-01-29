@@ -7,13 +7,16 @@ import configurePermissions from '@salesforce/apex/SetupWizardController.configu
 import validateConfiguration from '@salesforce/apex/SetupWizardController.validateConfiguration';
 import createSampleForm from '@salesforce/apex/SetupWizardController.createSampleForm';
 import getPublicUrl from '@salesforce/apex/SetupWizardController.getPublicUrl';
+import getReCaptchaSettings from '@salesforce/apex/SetupWizardController.getReCaptchaSettings';
+import saveReCaptchaSettings from '@salesforce/apex/SetupWizardController.saveReCaptchaSettings';
 
 const STEPS = [
     { label: 'Welcome', value: '1' },
     { label: 'Select Site', value: '2' },
     { label: 'Configure', value: '3' },
     { label: 'Verify', value: '4' },
-    { label: 'Complete', value: '5' }
+    { label: 'reCAPTCHA', value: '5' },
+    { label: 'Complete', value: '6' }
 ];
 
 export default class SetupWizard extends LightningElement {
@@ -39,7 +42,14 @@ export default class SetupWizard extends LightningElement {
     @track validationResults = [];
     @track validationPassed = false;
 
-    // Step 5 - Complete
+    // Step 5 - reCAPTCHA Configuration
+    @track recaptchaSiteKey = '';
+    @track recaptchaSecretKey = '';
+    @track recaptchaType = 'V2_Checkbox';
+    @track recaptchaConfigured = false;
+    @track recaptchaSkipped = false;
+
+    // Step 6 - Complete
     @track publicUrl = '';
     @track sampleFormCreated = false;
     @track sampleFormId = '';
@@ -74,6 +84,10 @@ export default class SetupWizard extends LightningElement {
         return this.currentStep === '5';
     }
 
+    get isStep6() {
+        return this.currentStep === '6';
+    }
+
     get canGoBack() {
         return this.currentStepNumber > 1;
     }
@@ -88,28 +102,50 @@ export default class SetupWizard extends LightningElement {
                 return this.autoConfigComplete;
             case '4':
                 return this.validationPassed;
+            case '5':
+                // reCAPTCHA step - can always proceed (skip or configure)
+                return true;
             default:
                 return false;
         }
     }
 
     get nextButtonLabel() {
-        if (this.currentStep === '4') {
+        if (this.currentStep === '5') {
             return 'Finish';
         }
         return 'Next';
     }
 
     get showBackButton() {
-        return this.currentStepNumber > 1 && this.currentStepNumber < 5;
+        return this.currentStepNumber > 1 && this.currentStepNumber < 6;
     }
 
     get showNextButton() {
-        return this.currentStepNumber < 5;
+        return this.currentStepNumber < 6;
     }
 
     get hasSites() {
         return this.sites && this.sites.length > 0;
+    }
+
+    get displayUrl() {
+        if (this.sampleFormCreated && this.publicUrl) {
+            return this.publicUrl + '?form=contact-support';
+        }
+        return this.publicUrl;
+    }
+
+    get recaptchaTypeOptions() {
+        return [
+            { label: 'v2 Checkbox ("I\'m not a robot") (Recommended)', value: 'V2_Checkbox' },
+            { label: 'v2 Invisible', value: 'V2_Invisible' },
+            { label: 'v3 Score-based', value: 'V3_Score' }
+        ];
+    }
+
+    get isV3Score() {
+        return this.recaptchaType === 'V3_Score';
     }
 
     get siteOptions() {
@@ -240,7 +276,90 @@ export default class SetupWizard extends LightningElement {
         this.loadValidation();
     }
 
-    // Step 5: Complete
+    // Step 5: reCAPTCHA Configuration
+    async loadRecaptchaSettings() {
+        this.isLoading = true;
+        try {
+            const result = await getReCaptchaSettings();
+            if (result.errorMessage) {
+                this.showToast('Warning', result.errorMessage, 'warning');
+            } else {
+                if (result.siteKey) {
+                    this.recaptchaSiteKey = result.siteKey;
+                }
+                if (result.captchaType) {
+                    this.recaptchaType = result.captchaType;
+                }
+                this.recaptchaConfigured = result.isConfigured;
+            }
+        } catch (error) {
+            this.showToast('Error', this.getErrorMessage(error), 'error');
+        } finally {
+            this.isLoading = false;
+        }
+    }
+
+    handleRecaptchaSiteKeyChange(event) {
+        this.recaptchaSiteKey = event.target.value;
+    }
+
+    handleRecaptchaSecretKeyChange(event) {
+        this.recaptchaSecretKey = event.target.value;
+    }
+
+    handleRecaptchaTypeChange(event) {
+        this.recaptchaType = event.detail.value;
+    }
+
+    async handleSaveRecaptcha() {
+        if (!this.recaptchaSiteKey || !this.recaptchaSecretKey) {
+            this.showToast('Warning', 'Please enter both Site Key and Secret Key.', 'warning');
+            return;
+        }
+
+        this.isLoading = true;
+        try {
+            const result = await saveReCaptchaSettings({
+                siteKey: this.recaptchaSiteKey,
+                secretKey: this.recaptchaSecretKey,
+                captchaType: this.recaptchaType,
+                scoreThreshold: null  // Uses default (0.3) from Custom Metadata field
+            });
+
+            if (result.errorMessage) {
+                this.showToast('Error', result.errorMessage, 'error');
+            } else {
+                this.recaptchaConfigured = result.isConfigured;
+                this.recaptchaType = result.captchaType || 'V2_Checkbox';
+                // Clear the secret key input after successful save (defense-in-depth)
+                this.recaptchaSecretKey = '';
+                this.showToast('Success', 'reCAPTCHA settings saved successfully!', 'success');
+            }
+        } catch (error) {
+            this.showToast('Error', this.getErrorMessage(error), 'error');
+        } finally {
+            this.isLoading = false;
+        }
+    }
+
+    handleSkipRecaptcha() {
+        this.recaptchaSkipped = true;
+        // Clear any entered values
+        this.recaptchaSiteKey = '';
+        this.recaptchaSecretKey = '';
+        // Proceed to next step
+        this.handleNext();
+    }
+
+    handleOpenRecaptchaAdmin() {
+        window.open('https://www.google.com/recaptcha/admin', '_blank');
+    }
+
+    handleGoBackToRecaptcha() {
+        this.currentStep = '5';
+    }
+
+    // Step 6: Complete
     async loadPublicUrl() {
         try {
             this.publicUrl = await getPublicUrl({ siteId: this.selectedSiteId, formName: null });
@@ -250,8 +369,9 @@ export default class SetupWizard extends LightningElement {
     }
 
     handleCopyUrl() {
-        if (this.publicUrl) {
-            navigator.clipboard.writeText(this.publicUrl).then(() => {
+        const urlToCopy = this.displayUrl;
+        if (urlToCopy) {
+            navigator.clipboard.writeText(urlToCopy).then(() => {
                 this.showToast('Copied', 'URL copied to clipboard', 'success');
             }).catch(() => {
                 this.showToast('Error', 'Could not copy URL', 'error');
@@ -321,8 +441,12 @@ export default class SetupWizard extends LightningElement {
             this.currentStep = '4';
             await this.loadValidation();
         } else if (step === 4) {
-            // Moving from Verify to Complete
+            // Moving from Verify to reCAPTCHA
             this.currentStep = '5';
+            await this.loadRecaptchaSettings();
+        } else if (step === 5) {
+            // Moving from reCAPTCHA to Complete
+            this.currentStep = '6';
             await this.loadPublicUrl();
         }
     }

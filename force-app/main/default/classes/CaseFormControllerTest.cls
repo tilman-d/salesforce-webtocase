@@ -626,4 +626,268 @@ private class CaseFormControllerTest {
             return res;
         }
     }
+
+    /**
+     * Mock class for successful reCAPTCHA v3 verification with high score
+     */
+    private class RecaptchaMockV3HighScore implements HttpCalloutMock {
+        public HttpResponse respond(HttpRequest req) {
+            HttpResponse res = new HttpResponse();
+            res.setStatusCode(200);
+            res.setBody('{"success": true, "score": 0.9, "action": "submit"}');
+            return res;
+        }
+    }
+
+    /**
+     * Mock class for successful reCAPTCHA v3 verification with low score
+     */
+    private class RecaptchaMockV3LowScore implements HttpCalloutMock {
+        public HttpResponse respond(HttpRequest req) {
+            HttpResponse res = new HttpResponse();
+            res.setStatusCode(200);
+            res.setBody('{"success": true, "score": 0.1, "action": "submit"}');
+            return res;
+        }
+    }
+
+    /**
+     * Mock class for reCAPTCHA v3 verification with wrong action
+     */
+    private class RecaptchaMockV3WrongAction implements HttpCalloutMock {
+        public HttpResponse respond(HttpRequest req) {
+            HttpResponse res = new HttpResponse();
+            res.setStatusCode(200);
+            res.setBody('{"success": true, "score": 0.9, "action": "homepage"}');
+            return res;
+        }
+    }
+
+    /**
+     * Test getCaptchaType method returns configured type
+     */
+    @isTest
+    static void testGetCaptchaTypeConfigured() {
+        // Create reCAPTCHA settings with v3 type
+        reCAPTCHA_Settings__c settings = new reCAPTCHA_Settings__c(
+            SetupOwnerId = UserInfo.getOrganizationId(),
+            Site_Key__c = 'test-site-key',
+            Secret_Key__c = 'test-secret-key',
+            Captcha_Type__c = 'V3_Score',
+            Score_Threshold__c = 0.5
+        );
+        insert settings;
+
+        PageReference pageRef = Page.CaseFormPage;
+        pageRef.getParameters().put('name', 'test-form');
+        Test.setCurrentPage(pageRef);
+
+        CaseFormController controller = new CaseFormController();
+
+        Test.startTest();
+        String captchaType = controller.getCaptchaType();
+        Test.stopTest();
+
+        System.assertEquals('V3_Score', captchaType, 'Captcha type should be V3_Score');
+    }
+
+    /**
+     * Test getCaptchaType method defaults to V2_Checkbox
+     */
+    @isTest
+    static void testGetCaptchaTypeDefault() {
+        PageReference pageRef = Page.CaseFormPage;
+        pageRef.getParameters().put('name', 'test-form');
+        Test.setCurrentPage(pageRef);
+
+        CaseFormController controller = new CaseFormController();
+
+        Test.startTest();
+        String captchaType = controller.getCaptchaType();
+        Test.stopTest();
+
+        System.assertEquals('V2_Checkbox', captchaType, 'Captcha type should default to V2_Checkbox');
+    }
+
+    /**
+     * Test v3 submission with high score passes
+     */
+    @isTest
+    static void testSubmitFormV3HighScorePasses() {
+        // Create reCAPTCHA settings with v3 type
+        reCAPTCHA_Settings__c settings = new reCAPTCHA_Settings__c(
+            SetupOwnerId = UserInfo.getOrganizationId(),
+            Site_Key__c = 'test-site-key',
+            Secret_Key__c = 'test-secret-key',
+            Captcha_Type__c = 'V3_Score',
+            Score_Threshold__c = 0.3
+        );
+        insert settings;
+
+        Form__c captchaForm = [SELECT Id FROM Form__c WHERE Form_Name__c = 'captcha-form' LIMIT 1];
+
+        Map<String, String> fieldValues = new Map<String, String>{
+            'Subject' => 'Test V3 High Score'
+        };
+
+        Test.setMock(HttpCalloutMock.class, new RecaptchaMockV3HighScore());
+
+        Test.startTest();
+        Map<String, Object> result = CaseFormController.submitForm(
+            captchaForm.Id,
+            fieldValues,
+            '',
+            '',
+            'test-v3-token'
+        );
+        Test.stopTest();
+
+        System.assertEquals(true, result.get('success'), 'Submission should succeed with high v3 score');
+    }
+
+    /**
+     * Test v3 submission with low score fails
+     */
+    @isTest
+    static void testSubmitFormV3LowScoreFails() {
+        // Create reCAPTCHA settings with v3 type
+        reCAPTCHA_Settings__c settings = new reCAPTCHA_Settings__c(
+            SetupOwnerId = UserInfo.getOrganizationId(),
+            Site_Key__c = 'test-site-key',
+            Secret_Key__c = 'test-secret-key',
+            Captcha_Type__c = 'V3_Score',
+            Score_Threshold__c = 0.3
+        );
+        insert settings;
+
+        Form__c captchaForm = [SELECT Id FROM Form__c WHERE Form_Name__c = 'captcha-form' LIMIT 1];
+
+        Map<String, String> fieldValues = new Map<String, String>{
+            'Subject' => 'Test V3 Low Score'
+        };
+
+        Test.setMock(HttpCalloutMock.class, new RecaptchaMockV3LowScore());
+
+        Test.startTest();
+        Map<String, Object> result = CaseFormController.submitForm(
+            captchaForm.Id,
+            fieldValues,
+            '',
+            '',
+            'test-v3-token'
+        );
+        Test.stopTest();
+
+        System.assertEquals(false, result.get('success'), 'Submission should fail with low v3 score');
+        System.assert(((String)result.get('error')).contains('security'), 'Error should mention security');
+    }
+
+    /**
+     * Test v3 submission with wrong action fails
+     */
+    @isTest
+    static void testSubmitFormV3WrongActionFails() {
+        // Create reCAPTCHA settings with v3 type
+        reCAPTCHA_Settings__c settings = new reCAPTCHA_Settings__c(
+            SetupOwnerId = UserInfo.getOrganizationId(),
+            Site_Key__c = 'test-site-key',
+            Secret_Key__c = 'test-secret-key',
+            Captcha_Type__c = 'V3_Score',
+            Score_Threshold__c = 0.3
+        );
+        insert settings;
+
+        Form__c captchaForm = [SELECT Id FROM Form__c WHERE Form_Name__c = 'captcha-form' LIMIT 1];
+
+        Map<String, String> fieldValues = new Map<String, String>{
+            'Subject' => 'Test V3 Wrong Action'
+        };
+
+        Test.setMock(HttpCalloutMock.class, new RecaptchaMockV3WrongAction());
+
+        Test.startTest();
+        Map<String, Object> result = CaseFormController.submitForm(
+            captchaForm.Id,
+            fieldValues,
+            '',
+            '',
+            'test-v3-token'
+        );
+        Test.stopTest();
+
+        System.assertEquals(false, result.get('success'), 'Submission should fail with wrong action');
+        System.assert(((String)result.get('error')).contains('Security'), 'Error should mention security');
+    }
+
+    /**
+     * Test v2 Invisible type works like v2 Checkbox (basic success)
+     */
+    @isTest
+    static void testSubmitFormV2InvisibleSuccess() {
+        // Create reCAPTCHA settings with v2 Invisible type
+        reCAPTCHA_Settings__c settings = new reCAPTCHA_Settings__c(
+            SetupOwnerId = UserInfo.getOrganizationId(),
+            Site_Key__c = 'test-site-key',
+            Secret_Key__c = 'test-secret-key',
+            Captcha_Type__c = 'V2_Invisible'
+        );
+        insert settings;
+
+        Form__c captchaForm = [SELECT Id FROM Form__c WHERE Form_Name__c = 'captcha-form' LIMIT 1];
+
+        Map<String, String> fieldValues = new Map<String, String>{
+            'Subject' => 'Test V2 Invisible'
+        };
+
+        Test.setMock(HttpCalloutMock.class, new RecaptchaMockSuccess());
+
+        Test.startTest();
+        Map<String, Object> result = CaseFormController.submitForm(
+            captchaForm.Id,
+            fieldValues,
+            '',
+            '',
+            'test-invisible-token'
+        );
+        Test.stopTest();
+
+        System.assertEquals(true, result.get('success'), 'Submission should succeed with v2 Invisible');
+    }
+
+    /**
+     * Test v3 with custom threshold
+     */
+    @isTest
+    static void testSubmitFormV3CustomThreshold() {
+        // Create reCAPTCHA settings with v3 type and high threshold
+        reCAPTCHA_Settings__c settings = new reCAPTCHA_Settings__c(
+            SetupOwnerId = UserInfo.getOrganizationId(),
+            Site_Key__c = 'test-site-key',
+            Secret_Key__c = 'test-secret-key',
+            Captcha_Type__c = 'V3_Score',
+            Score_Threshold__c = 0.8  // Higher than default 0.3
+        );
+        insert settings;
+
+        Form__c captchaForm = [SELECT Id FROM Form__c WHERE Form_Name__c = 'captcha-form' LIMIT 1];
+
+        Map<String, String> fieldValues = new Map<String, String>{
+            'Subject' => 'Test V3 Custom Threshold'
+        };
+
+        // Mock returns score of 0.9 which is above 0.8 threshold
+        Test.setMock(HttpCalloutMock.class, new RecaptchaMockV3HighScore());
+
+        Test.startTest();
+        Map<String, Object> result = CaseFormController.submitForm(
+            captchaForm.Id,
+            fieldValues,
+            '',
+            '',
+            'test-v3-token'
+        );
+        Test.stopTest();
+
+        System.assertEquals(true, result.get('success'), 'Submission should succeed with score above custom threshold');
+    }
 }

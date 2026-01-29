@@ -390,8 +390,128 @@
                 </div>
             </template>
 
-            <!-- Step 5: Complete -->
+            <!-- Step 5: reCAPTCHA Configuration -->
             <template if:true={isStep5}>
+                <div class="slds-p-around_medium">
+                    <div class="slds-text-heading_medium slds-m-bottom_medium">Configure reCAPTCHA (Optional)</div>
+                    <p class="slds-m-bottom_medium">
+                        Add Google reCAPTCHA v2 to protect your forms from spam submissions.
+                        This step is optional - you can skip it and configure later.
+                    </p>
+
+                    <!-- Instructions Box -->
+                    <div class="slds-box slds-m-bottom_medium">
+                        <div class="slds-text-heading_small slds-m-bottom_small">
+                            <lightning-icon icon-name="utility:info" size="x-small" class="slds-m-right_x-small"></lightning-icon>
+                            How to Get reCAPTCHA Keys
+                        </div>
+                        <ol class="slds-list_ordered slds-m-bottom_small">
+                            <li>Go to <strong>Google reCAPTCHA Admin Console</strong></li>
+                            <li>Click <strong>+ Create</strong> (or the "+" icon)</li>
+                            <li>Enter a <strong>Label</strong> (e.g., "Salesforce Web-to-Case")</li>
+                            <li>Select the reCAPTCHA type that matches your choice below</li>
+                            <li>Add your Salesforce Site domain (e.g., yourcompany.my.site.com)</li>
+                            <li>Accept the terms and click <strong>Submit</strong></li>
+                            <li>Copy the <strong>Site Key</strong> and <strong>Secret Key</strong></li>
+                        </ol>
+                        <lightning-button
+                            label="Open reCAPTCHA Admin Console"
+                            variant="neutral"
+                            onclick={handleOpenRecaptchaAdmin}
+                            icon-name="utility:new_window">
+                        </lightning-button>
+                    </div>
+
+                    <!-- Current Status -->
+                    <template if:true={recaptchaConfigured}>
+                        <div class="slds-box slds-box_x-small slds-theme_success slds-m-bottom_medium">
+                            <lightning-icon icon-name="utility:success" size="x-small" variant="inverse" class="slds-m-right_x-small"></lightning-icon>
+                            reCAPTCHA is configured for this org.
+                        </div>
+                    </template>
+
+                    <!-- Configuration Form -->
+                    <div class="slds-box slds-m-bottom_medium">
+                        <div class="slds-text-heading_small slds-m-bottom_small">Configure reCAPTCHA</div>
+
+                        <template if:true={recaptchaSiteKey}>
+                            <div class="slds-text-body_small slds-text-color_weak slds-m-bottom_small">
+                                <lightning-icon icon-name="utility:info" size="xx-small" class="slds-m-right_xx-small"></lightning-icon>
+                                The values below are from your previous configuration. You can update them or leave them as-is.
+                            </div>
+                        </template>
+
+                        <!-- reCAPTCHA Type Selection -->
+                        <lightning-combobox
+                            label="reCAPTCHA Type"
+                            value={recaptchaType}
+                            options={recaptchaTypeOptions}
+                            onchange={handleRecaptchaTypeChange}
+                            class="slds-m-bottom_small">
+                        </lightning-combobox>
+
+                        <div class="slds-text-body_small slds-text-color_weak slds-m-bottom_small">
+                            <template if:false={isV3Score}>
+                                <strong>v2 Checkbox:</strong> Shows "I'm not a robot" checkbox. Best for standard forms.<br/>
+                                <strong>v2 Invisible:</strong> No checkbox, triggered on submit. May show challenge if suspicious.
+                            </template>
+                            <template if:true={isV3Score}>
+                                <strong>v3 Score:</strong> Background scoring (0.0-1.0). No user interaction. Best for high-traffic forms.
+                            </template>
+                        </div>
+
+                        <lightning-input
+                            type="text"
+                            label="Site Key"
+                            value={recaptchaSiteKey}
+                            onchange={handleRecaptchaSiteKeyChange}
+                            placeholder="6Le..."
+                            class="slds-m-bottom_small">
+                        </lightning-input>
+
+                        <lightning-input
+                            type="password"
+                            label="Secret Key"
+                            value={recaptchaSecretKey}
+                            onchange={handleRecaptchaSecretKeyChange}
+                            placeholder="6Le..."
+                            class="slds-m-bottom_medium">
+                        </lightning-input>
+
+                        <div class="slds-text-body_small slds-text-color_weak slds-m-bottom_medium">
+                            <lightning-icon icon-name="utility:lock" size="xx-small" class="slds-m-right_xx-small"></lightning-icon>
+                            Your Secret Key is stored securely and never exposed to the frontend.
+                        </div>
+
+                        <div class="slds-grid slds-grid_align-spread">
+                            <lightning-button
+                                label="Save reCAPTCHA Settings"
+                                variant="brand"
+                                onclick={handleSaveRecaptcha}
+                                icon-name="utility:check">
+                            </lightning-button>
+
+                            <lightning-button
+                                label="Skip for Now"
+                                variant="neutral"
+                                onclick={handleSkipRecaptcha}
+                                icon-name="utility:chevronright"
+                                icon-position="right">
+                            </lightning-button>
+                        </div>
+                    </div>
+
+                    <!-- Note about enabling per form -->
+                    <div class="slds-box slds-box_x-small slds-theme_shade">
+                        <lightning-icon icon-name="utility:info" size="x-small" class="slds-m-right_x-small"></lightning-icon>
+                        <strong>Note:</strong> After configuring reCAPTCHA here, you'll also need to enable it on individual forms
+                        using the "Enable Captcha" checkbox in the Form Manager.
+                    </div>
+                </div>
+            </template>
+
+            <!-- Step 6: Complete -->
+            <template if:true={isStep6}>
                 <div class="slds-p-around_medium">
                     <div class="slds-text-align_center slds-m-bottom_large">
                         <lightning-icon icon-name="utility:success" size="large" variant="success"></lightning-icon>
@@ -450,14 +570,21 @@
                     <!-- Public URL -->
                     <div class="slds-box slds-m-bottom_medium">
                         <div class="slds-text-heading_small slds-m-bottom_small">Your Public Form URL</div>
-                        <p class="slds-text-body_small slds-m-bottom_small">
-                            Use this base URL with <strong>?form=your-form-name</strong> to access any form you create.
-                        </p>
+                        <template if:true={sampleFormCreated}>
+                            <p class="slds-text-body_small slds-m-bottom_small">
+                                This URL opens the "Contact Support" sample form.
+                            </p>
+                        </template>
+                        <template if:false={sampleFormCreated}>
+                            <p class="slds-text-body_small slds-m-bottom_small">
+                                Use this base URL with <strong>?form=your-form-name</strong> to access any form you create.
+                            </p>
+                        </template>
                         <div class="slds-grid slds-grid_vertical-align-center">
                             <div class="slds-col slds-grow">
                                 <lightning-input
                                     type="url"
-                                    value={publicUrl}
+                                    value={displayUrl}
                                     readonly
                                     variant="label-hidden">
                                 </lightning-input>
@@ -483,11 +610,26 @@
                         </lightning-button>
                     </div>
 
-                    <!-- Note about reCAPTCHA -->
-                    <div class="slds-box slds-box_x-small slds-theme_shade">
-                        <lightning-icon icon-name="utility:info" size="x-small" class="slds-m-right_x-small"></lightning-icon>
-                        <strong>Note:</strong> For production use, consider adding reCAPTCHA to protect against spam submissions.
-                    </div>
+                    <!-- reCAPTCHA Status -->
+                    <template if:true={recaptchaConfigured}>
+                        <div class="slds-box slds-box_x-small slds-theme_success slds-m-bottom_medium">
+                            <lightning-icon icon-name="utility:success" size="x-small" variant="inverse" class="slds-m-right_x-small"></lightning-icon>
+                            <strong>reCAPTCHA:</strong> Configured - Don't forget to enable "Enable Captcha" on your forms in Form Manager.
+                        </div>
+                    </template>
+                    <template if:false={recaptchaConfigured}>
+                        <div class="slds-box slds-box_x-small slds-theme_warning slds-m-bottom_medium">
+                            <lightning-icon icon-name="utility:warning" size="x-small" class="slds-m-right_x-small"></lightning-icon>
+                            <strong>reCAPTCHA:</strong> Not configured - Your forms are not protected from spam.
+                            <lightning-button
+                                label="Configure Now"
+                                variant="neutral"
+                                onclick={handleGoBackToRecaptcha}
+                                class="slds-m-left_small"
+                                size="small">
+                            </lightning-button>
+                        </div>
+                    </template>
                 </div>
             </template>
 

@@ -78,6 +78,18 @@ global without sharing class CaseFormController {
     }
 
     /**
+     * Get the captcha type from custom settings
+     * Defaults to V2_Checkbox for backwards compatibility
+     */
+    public String getCaptchaType() {
+        reCAPTCHA_Settings__c settings = reCAPTCHA_Settings__c.getOrgDefaults();
+        if (settings != null && String.isNotBlank(settings.Captcha_Type__c)) {
+            return settings.Captcha_Type__c;
+        }
+        return 'V2_Checkbox';
+    }
+
+    /**
      * Check if captcha is enabled for this form
      */
     public Boolean getCaptchaEnabled() {
@@ -129,11 +141,41 @@ global without sharing class CaseFormController {
                         return result;
                     }
 
-                    Boolean captchaValid = verifyCaptcha(captchaToken, settings.Secret_Key__c);
-                    if (!captchaValid) {
+                    // Get captcha type and threshold
+                    String captchaType = String.isNotBlank(settings.Captcha_Type__c) ? settings.Captcha_Type__c : 'V2_Checkbox';
+                    Decimal scoreThreshold = settings.Score_Threshold__c != null ? settings.Score_Threshold__c : 0.3;
+
+                    // Verify with Google
+                    Map<String, Object> captchaResult = verifyCaptchaWithDetails(captchaToken, settings.Secret_Key__c);
+                    Boolean captchaSuccess = captchaResult.get('success') == true;
+
+                    if (!captchaSuccess) {
                         result.put('success', false);
                         result.put('error', 'CAPTCHA verification failed. Please try again.');
                         return result;
+                    }
+
+                    // Additional v3 validation
+                    if (captchaType == 'V3_Score') {
+                        // Validate action matches expected (prevents replay attacks)
+                        String action = (String) captchaResult.get('action');
+                        if (action != 'submit') {
+                            ErrorLogger.log('reCAPTCHA v3 action mismatch', 'Expected: submit, Got: ' + action, formId);
+                            result.put('success', false);
+                            result.put('error', 'Security verification failed.');
+                            return result;
+                        }
+
+                        // Check score threshold
+                        Decimal score = captchaResult.get('score') != null ? (Decimal) captchaResult.get('score') : 0;
+                        if (score < scoreThreshold) {
+                            // Log for admin review (but don't log the raw token!)
+                            ErrorLogger.log('reCAPTCHA v3 score below threshold',
+                                'Score: ' + score + ', Threshold: ' + scoreThreshold, formId);
+                            result.put('success', false);
+                            result.put('error', 'Submission blocked for security reasons. Please try again or contact support.');
+                            return result;
+                        }
                     }
                 }
             }
@@ -224,12 +266,16 @@ global without sharing class CaseFormController {
 
 
     /**
-     * Verify reCAPTCHA token with Google's API
+     * Verify reCAPTCHA token with Google's API and return full response details
+     * Needed for v3 score-based verification
      * @param token The reCAPTCHA response token from the client
      * @param secretKey The secret key from reCAPTCHA settings
-     * @return true if verification successful, false otherwise
+     * @return Map with success, score (for v3), action (for v3), and error-codes
      */
-    private static Boolean verifyCaptcha(String token, String secretKey) {
+    private static Map<String, Object> verifyCaptchaWithDetails(String token, String secretKey) {
+        Map<String, Object> resultMap = new Map<String, Object>();
+        resultMap.put('success', false);
+
         try {
             HttpRequest req = new HttpRequest();
             req.setEndpoint('https://www.google.com/recaptcha/api/siteverify');
@@ -244,14 +290,36 @@ global without sharing class CaseFormController {
 
             if (res.getStatusCode() == 200) {
                 Map<String, Object> responseMap = (Map<String, Object>) JSON.deserializeUntyped(res.getBody());
-                return responseMap.get('success') == true;
+                resultMap.put('success', responseMap.get('success') == true);
+
+                // For v3, extract score and action
+                if (responseMap.containsKey('score')) {
+                    resultMap.put('score', responseMap.get('score'));
+                }
+                if (responseMap.containsKey('action')) {
+                    resultMap.put('action', responseMap.get('action'));
+                }
+                if (responseMap.containsKey('error-codes')) {
+                    resultMap.put('error-codes', responseMap.get('error-codes'));
+                }
             } else {
                 ErrorLogger.log('reCAPTCHA verification HTTP error: ' + res.getStatusCode(), res.getBody());
-                return false;
             }
         } catch (Exception e) {
             ErrorLogger.logException(e, null);
-            return false;
         }
+
+        return resultMap;
+    }
+
+    /**
+     * Verify reCAPTCHA token with Google's API (legacy method for backwards compatibility)
+     * @param token The reCAPTCHA response token from the client
+     * @param secretKey The secret key from reCAPTCHA settings
+     * @return true if verification successful, false otherwise
+     */
+    private static Boolean verifyCaptcha(String token, String secretKey) {
+        Map<String, Object> result = verifyCaptchaWithDetails(token, secretKey);
+        return result.get('success') == true;
     }
 }

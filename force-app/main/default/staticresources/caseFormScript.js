@@ -1,9 +1,18 @@
 /**
  * Web-to-Case Form Script
- * Handles form validation, file upload, reCAPTCHA, and submission via Visualforce Remoting
+ * Handles form validation, file upload, reCAPTCHA (v2 Checkbox, v2 Invisible, v3 Score), and submission via Visualforce Remoting
  */
 (function() {
     'use strict';
+
+    // Global callback for v2 Invisible reCAPTCHA
+    var captchaResolve = null;
+    window.onCaptchaSuccess = function(token) {
+        if (captchaResolve) {
+            captchaResolve(token);
+            captchaResolve = null;
+        }
+    };
 
     // Wait for DOM to be ready
     document.addEventListener('DOMContentLoaded', init);
@@ -23,7 +32,7 @@
 
         console.log('CaseForm: Initializing with formId:', formConfig.formId);
         if (formConfig.enableCaptcha) {
-            console.log('CaseForm: reCAPTCHA is enabled');
+            console.log('CaseForm: reCAPTCHA is enabled, type:', formConfig.captchaType);
         }
 
         // Attach submit handler
@@ -40,13 +49,70 @@
     }
 
     /**
+     * Execute reCAPTCHA and return token via Promise
+     * Handles v2 Checkbox (sync), v2 Invisible (callback), and v3 Score (async)
+     */
+    function executeCaptcha() {
+        return new Promise(function(resolve, reject) {
+            if (!formConfig.enableCaptcha) {
+                resolve('');
+                return;
+            }
+
+            var captchaType = formConfig.captchaType || 'V2_Checkbox';
+
+            if (captchaType === 'V2_Invisible') {
+                // v2 Invisible - execute triggers challenge, callback receives token
+                if (typeof grecaptcha === 'undefined') {
+                    reject(new Error('reCAPTCHA not loaded'));
+                    return;
+                }
+                captchaResolve = resolve;
+                try {
+                    grecaptcha.execute();
+                } catch (e) {
+                    captchaResolve = null;
+                    reject(e);
+                }
+            } else if (captchaType === 'V3_Score') {
+                // v3 Score - async execution with action
+                if (typeof grecaptcha === 'undefined') {
+                    reject(new Error('reCAPTCHA not loaded'));
+                    return;
+                }
+                grecaptcha.ready(function() {
+                    grecaptcha.execute(formConfig.captchaSiteKey, { action: 'submit' })
+                        .then(function(token) {
+                            resolve(token);
+                        })
+                        .catch(function(err) {
+                            reject(err);
+                        });
+                });
+            } else {
+                // v2 Checkbox - synchronous retrieval
+                if (typeof grecaptcha !== 'undefined') {
+                    try {
+                        var token = grecaptcha.getResponse();
+                        resolve(token);
+                    } catch (e) {
+                        console.error('CaseForm: Error getting reCAPTCHA response:', e);
+                        resolve('');
+                    }
+                } else {
+                    resolve('');
+                }
+            }
+        });
+    }
+
+    /**
      * Handle form submission
      */
     function handleSubmit(e) {
         e.preventDefault();
 
         var form = e.target;
-        var submitButton = document.getElementById('submitButton');
 
         // Validate form
         var validationErrors = validateForm(form);
@@ -55,16 +121,19 @@
             return;
         }
 
-        // Validate reCAPTCHA if enabled
-        var captchaToken = '';
-        if (formConfig.enableCaptcha) {
-            captchaToken = getCaptchaToken();
-            if (!captchaToken) {
-                showCaptchaError();
-                showError('Please complete the CAPTCHA verification.');
-                return;
+        var captchaType = formConfig.captchaType || 'V2_Checkbox';
+
+        // For v2 Checkbox, validate synchronously first
+        if (formConfig.enableCaptcha && captchaType === 'V2_Checkbox') {
+            if (typeof grecaptcha !== 'undefined') {
+                var token = grecaptcha.getResponse();
+                if (!token) {
+                    showCaptchaError();
+                    showError('Please complete the CAPTCHA verification.');
+                    return;
+                }
+                hideCaptchaError();
             }
-            hideCaptchaError();
         }
 
         // Collect field values
@@ -73,19 +142,51 @@
         // Check for file
         var fileInput = document.getElementById('fileInput');
         var hasFile = fileInput && fileInput.files && fileInput.files.length > 0;
+        var file = hasFile ? fileInput.files[0] : null;
 
-        if (hasFile) {
-            var file = fileInput.files[0];
+        // Validate file size if file present
+        if (file && file.size > formConfig.maxFileSize) {
+            var maxMB = Math.round(formConfig.maxFileSize / 1024 / 1024);
+            showError('File size exceeds the maximum allowed (' + maxMB + ' MB).');
+            return;
+        }
 
-            // Validate file size
-            if (file.size > formConfig.maxFileSize) {
-                var maxMB = Math.round(formConfig.maxFileSize / 1024 / 1024);
-                showError('File size exceeds the maximum allowed (' + maxMB + ' MB).');
-                return;
+        setLoading(true);
+
+        // For v3 and v2 Invisible, get fresh token right before submission
+        // For v2 Checkbox, we already have the token
+        if (formConfig.enableCaptcha && (captchaType === 'V3_Score' || captchaType === 'V2_Invisible')) {
+            executeCaptcha()
+                .then(function(captchaToken) {
+                    if (!captchaToken && captchaType === 'V2_Invisible') {
+                        // v2 Invisible should always return a token after challenge
+                        setLoading(false);
+                        showCaptchaError();
+                        showError('CAPTCHA verification failed. Please try again.');
+                        return;
+                    }
+                    processSubmission(form, fieldValues, file, captchaToken);
+                })
+                .catch(function(err) {
+                    setLoading(false);
+                    console.error('CaseForm: reCAPTCHA error:', err);
+                    showError('Could not verify. Please check your connection and try again.');
+                });
+        } else {
+            // v2 Checkbox or captcha disabled
+            var captchaToken = '';
+            if (formConfig.enableCaptcha && typeof grecaptcha !== 'undefined') {
+                captchaToken = grecaptcha.getResponse();
             }
+            processSubmission(form, fieldValues, file, captchaToken);
+        }
+    }
 
-            // Read file and submit
-            setLoading(true);
+    /**
+     * Process form submission after captcha validation
+     */
+    function processSubmission(form, fieldValues, file, captchaToken) {
+        if (file) {
             readFileAsBase64(file, function(base64Content) {
                 submitToSalesforce(fieldValues, file.name, base64Content, captchaToken);
             }, function(error) {
@@ -93,25 +194,8 @@
                 showError('Error reading file: ' + error);
             });
         } else {
-            // Submit without file
-            setLoading(true);
             submitToSalesforce(fieldValues, '', '', captchaToken);
         }
-    }
-
-    /**
-     * Get reCAPTCHA token if available
-     */
-    function getCaptchaToken() {
-        if (typeof grecaptcha !== 'undefined') {
-            try {
-                return grecaptcha.getResponse();
-            } catch (e) {
-                console.error('CaseForm: Error getting reCAPTCHA response:', e);
-                return '';
-            }
-        }
-        return '';
     }
 
     /**
@@ -120,7 +204,11 @@
     function resetCaptcha() {
         if (typeof grecaptcha !== 'undefined') {
             try {
-                grecaptcha.reset();
+                // Only reset for v2 types (v3 doesn't have a widget to reset)
+                var captchaType = formConfig.captchaType || 'V2_Checkbox';
+                if (captchaType !== 'V3_Score') {
+                    grecaptcha.reset();
+                }
             } catch (e) {
                 console.error('CaseForm: Error resetting reCAPTCHA:', e);
             }

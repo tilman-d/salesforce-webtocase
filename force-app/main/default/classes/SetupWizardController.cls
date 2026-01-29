@@ -137,6 +137,25 @@ public with sharing class SetupWizardController {
     }
 
     /**
+     * Wrapper for reCAPTCHA settings result
+     */
+    public class ReCaptchaSettingsResult {
+        @AuraEnabled public Boolean isConfigured;
+        @AuraEnabled public String siteKey;
+        @AuraEnabled public Boolean hasSecretKey;
+        @AuraEnabled public String captchaType;
+        @AuraEnabled public Decimal scoreThreshold;
+        @AuraEnabled public String errorMessage;
+
+        public ReCaptchaSettingsResult() {
+            this.isConfigured = false;
+            this.hasSecretKey = false;
+            this.captchaType = 'V2_Checkbox';
+            this.scoreThreshold = 0.3;
+        }
+    }
+
+    /**
      * Helper method to create AuraHandledException with proper message
      */
     private static AuraHandledException createException(String message) {
@@ -834,5 +853,149 @@ public with sharing class SetupWizardController {
         }
 
         return summary;
+    }
+
+    /**
+     * Get current reCAPTCHA settings
+     * Note: Never exposes the actual Secret Key - only indicates if it's set
+     */
+    @AuraEnabled
+    public static ReCaptchaSettingsResult getReCaptchaSettings() {
+        ReCaptchaSettingsResult result = new ReCaptchaSettingsResult();
+
+        try {
+            reCAPTCHA_Settings__c settings = reCAPTCHA_Settings__c.getOrgDefaults();
+
+            if (settings != null && settings.Id != null) {
+                result.siteKey = settings.Site_Key__c;
+                result.hasSecretKey = String.isNotBlank(settings.Secret_Key__c);
+                result.isConfigured = String.isNotBlank(settings.Site_Key__c) &&
+                                      String.isNotBlank(settings.Secret_Key__c);
+                result.captchaType = String.isNotBlank(settings.Captcha_Type__c) ?
+                                     settings.Captcha_Type__c : 'V2_Checkbox';
+                result.scoreThreshold = settings.Score_Threshold__c != null ?
+                                        settings.Score_Threshold__c : 0.3;
+            }
+        } catch (Exception e) {
+            result.errorMessage = 'Error retrieving reCAPTCHA settings: ' + e.getMessage();
+            ErrorLogger.logException(e, null);
+        }
+
+        return result;
+    }
+
+    /**
+     * Save reCAPTCHA settings at org level
+     * Allows partial updates - if siteKey or secretKey is blank, preserves existing value
+     * @param siteKey The public Site Key from Google reCAPTCHA admin (max 255 chars)
+     * @param secretKey The private Secret Key from Google reCAPTCHA admin (max 255 chars)
+     * @param captchaType The reCAPTCHA type: V2_Checkbox, V2_Invisible, or V3_Score
+     * @param scoreThreshold The minimum score for v3 verification (0.0-1.0)
+     * @return Result indicating success or failure
+     */
+    @AuraEnabled
+    public static ReCaptchaSettingsResult saveReCaptchaSettings(String siteKey, String secretKey,
+                                                                  String captchaType, Decimal scoreThreshold) {
+        ReCaptchaSettingsResult result = new ReCaptchaSettingsResult();
+
+        try {
+            // Trim inputs
+            String trimmedSiteKey = String.isNotBlank(siteKey) ? siteKey.trim() : null;
+            String trimmedSecretKey = String.isNotBlank(secretKey) ? secretKey.trim() : null;
+            String trimmedCaptchaType = String.isNotBlank(captchaType) ? captchaType.trim() : null;
+
+            // Validate field lengths (max 255 chars)
+            if (trimmedSiteKey != null && trimmedSiteKey.length() > 255) {
+                result.errorMessage = 'Site Key exceeds maximum length of 255 characters.';
+                return result;
+            }
+            if (trimmedSecretKey != null && trimmedSecretKey.length() > 255) {
+                result.errorMessage = 'Secret Key exceeds maximum length of 255 characters.';
+                return result;
+            }
+
+            // Validate captcha type
+            Set<String> validTypes = new Set<String>{'V2_Checkbox', 'V2_Invisible', 'V3_Score'};
+            if (trimmedCaptchaType != null && !validTypes.contains(trimmedCaptchaType)) {
+                result.errorMessage = 'Invalid captcha type. Must be V2_Checkbox, V2_Invisible, or V3_Score.';
+                return result;
+            }
+
+            // Validate score threshold
+            if (scoreThreshold != null && (scoreThreshold < 0 || scoreThreshold > 1)) {
+                result.errorMessage = 'Score threshold must be between 0.0 and 1.0.';
+                return result;
+            }
+
+            // Get existing settings or create new
+            reCAPTCHA_Settings__c settings = reCAPTCHA_Settings__c.getOrgDefaults();
+
+            if (settings == null || settings.Id == null) {
+                // Create new org-level settings
+                settings = new reCAPTCHA_Settings__c(
+                    SetupOwnerId = UserInfo.getOrganizationId()
+                );
+            }
+
+            // Allow partial updates - only update if new value is provided
+            if (trimmedSiteKey != null) {
+                settings.Site_Key__c = trimmedSiteKey;
+            }
+            if (trimmedSecretKey != null) {
+                settings.Secret_Key__c = trimmedSecretKey;
+            }
+            if (trimmedCaptchaType != null) {
+                settings.Captcha_Type__c = trimmedCaptchaType;
+            }
+            if (scoreThreshold != null) {
+                settings.Score_Threshold__c = scoreThreshold;
+            }
+
+            upsert settings;
+
+            // Set result
+            result.siteKey = settings.Site_Key__c;
+            result.hasSecretKey = String.isNotBlank(settings.Secret_Key__c);
+            result.isConfigured = String.isNotBlank(settings.Site_Key__c) &&
+                                  String.isNotBlank(settings.Secret_Key__c);
+            result.captchaType = String.isNotBlank(settings.Captcha_Type__c) ?
+                                 settings.Captcha_Type__c : 'V2_Checkbox';
+            result.scoreThreshold = settings.Score_Threshold__c != null ?
+                                    settings.Score_Threshold__c : 0.3;
+
+        } catch (Exception e) {
+            result.errorMessage = 'Error saving reCAPTCHA settings: ' + e.getMessage();
+            ErrorLogger.logException(e, null);
+        }
+
+        return result;
+    }
+
+    /**
+     * Clear reCAPTCHA settings
+     */
+    @AuraEnabled
+    public static ReCaptchaSettingsResult clearReCaptchaSettings() {
+        ReCaptchaSettingsResult result = new ReCaptchaSettingsResult();
+
+        try {
+            reCAPTCHA_Settings__c settings = reCAPTCHA_Settings__c.getOrgDefaults();
+
+            if (settings != null && settings.Id != null) {
+                settings.Site_Key__c = null;
+                settings.Secret_Key__c = null;
+                update settings;
+            }
+
+            result.isConfigured = false;
+            result.hasSecretKey = false;
+            result.siteKey = null;
+
+        } catch (Exception e) {
+            result.errorMessage = 'Error clearing reCAPTCHA settings: ' + e.getMessage();
+            ErrorLogger.logException(e, null);
+        }
+
+        return result;
     }
 }
