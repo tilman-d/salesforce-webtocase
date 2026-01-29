@@ -10,7 +10,9 @@
                     <lightning-progress-step
                         key={step.value}
                         label={step.label}
-                        value={step.value}>
+                        value={step.value}
+                        data-step={step.value}
+                        onclick={handleStepClick}>
                     </lightning-progress-step>
                 </template>
             </lightning-progress-indicator>

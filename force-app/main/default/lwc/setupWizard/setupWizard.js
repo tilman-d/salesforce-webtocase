@@ -64,6 +64,41 @@ export default class SetupWizard extends LightningElement {
         return parseInt(this.currentStep, 10);
     }
 
+    // Check if a specific step's requirements are met
+    isStepComplete(stepNum) {
+        switch (stepNum) {
+            case 1:
+                return this.preconditions?.allPassed === true;
+            case 2:
+                return !!this.selectedSiteId;
+            case 3:
+                return this.autoConfigComplete === true;
+            case 4:
+                return this.validationPassed === true;
+            case 5:
+                return true; // reCAPTCHA is optional
+            case 6:
+                return true; // Final step
+            default:
+                return false;
+        }
+    }
+
+    // Check if navigation to a target step is allowed
+    canNavigateToStep(targetStep) {
+        // Can always go back to previous steps
+        if (targetStep <= this.currentStepNumber) {
+            return true;
+        }
+        // For forward navigation, check all intermediate steps are complete
+        for (let i = this.currentStepNumber; i < targetStep; i++) {
+            if (!this.isStepComplete(i)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     get isStep1() {
         return this.currentStep === '1';
     }
@@ -420,6 +455,43 @@ export default class SetupWizard extends LightningElement {
         const step = this.currentStepNumber;
         if (step > 1) {
             this.currentStep = String(step - 1);
+        }
+    }
+
+    // Handle clicking on a step in the progress path
+    async handleStepClick(event) {
+        // Get step value from the target element's dataset
+        const stepValue = event.target.dataset.step || event.currentTarget.dataset.step;
+        if (!stepValue) {
+            return;
+        }
+
+        const targetStep = parseInt(stepValue, 10);
+        const currentStepNum = this.currentStepNumber;
+
+        // No action if clicking current step
+        if (targetStep === currentStepNum) {
+            return;
+        }
+
+        // Check if navigation is allowed
+        if (!this.canNavigateToStep(targetStep)) {
+            this.showToast('Warning', 'Please complete the current step first.', 'warning');
+            return;
+        }
+
+        // Navigate to the target step
+        this.currentStep = stepValue;
+
+        // Load step-specific data as needed
+        if (targetStep === 2 && this.sites.length === 0) {
+            await this.loadSites();
+        } else if (targetStep === 4) {
+            await this.loadValidation();
+        } else if (targetStep === 5) {
+            await this.loadRecaptchaSettings();
+        } else if (targetStep === 6) {
+            await this.loadPublicUrl();
         }
     }
 

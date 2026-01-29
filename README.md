@@ -433,6 +433,13 @@ force-app/main/default/
 
 ## Changelog
 
+### v0.4.3 (2026-01-29) - Setup Wizard Path Component Fix
+- **Fixed:** Replaced custom CSS chevron path with standard `lightning-progress-indicator` component
+- Eliminates persistent white gap issues between chevron steps
+- Native Salesforce component handles complete/current/incomplete styling automatically
+- Simplified codebase: removed ~245 lines of custom CSS and ~50 lines of JS
+- Click navigation on steps still works via `data-step` attribute
+
 ### v0.4.2 (2026-01-29) - reCAPTCHA v3 Support & UX Improvements
 - **reCAPTCHA v3 Score-based** support added alongside v2 Checkbox and v2 Invisible
 - **reCAPTCHA Type selector** in Setup Wizard with clear descriptions for each type
@@ -533,7 +540,7 @@ The following items require manual verification before release:
 
 ## Next Session Starting Point
 
-**Status:** Phases 0-3 complete. **Ready for Phase 4: Advanced Features.**
+**Status:** Phases 0-3 complete. Ready for Phase 4.
 
 **Dev org:** `tilman.dietrich@gmail.com.dev` (alias: `devorg`)
 

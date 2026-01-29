@@ -14,7 +14,6 @@
     flex: 1;
 }
 
-/* Ensure table doesn't overflow */
 .slds-table {
     table-layout: fixed;
 }
