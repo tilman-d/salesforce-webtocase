@@ -4,86 +4,16 @@ A Salesforce app that lets you create public web forms that submit Cases with fi
 
 ---
 
-## 🧪 MANUAL TESTING REQUIRED: URL Display Feature
+## 🧪 MANUAL TESTING REQUIRED: reCAPTCHA Issues
 
-The following new feature needs manual verification before release:
+The following reCAPTCHA items need manual verification before release:
 
-### URL Display Feature Overview
-- **Site dropdown** in Form Manager (new/edit form views)
-- **Public URL display** with copy button
-- **"Copy URL" row action** in form list view
-- **Default Site configuration** saved during Setup Wizard
-
-### Testing Steps
-
-#### 1. Setup Wizard - Save Default Site
-- [ ] Go to **Setup Wizard** tab
-- [ ] Complete Steps 1-2 (Welcome, Select Site)
-- [ ] On Step 2, select a Site and proceed to Step 3
-- [ ] Complete the wizard through to Step 6
-- [ ] Verify the default Site is saved (check `reCAPTCHA_Settings__c` via SOQL or Setup)
-
-```apex
-// Verify default Site was saved:
-reCAPTCHA_Settings__c s = reCAPTCHA_Settings__c.getOrgDefaults();
-System.debug('Default Site ID: ' + s.Default_Site_Id__c);
-System.debug('Default Base URL: ' + s.Default_Site_Base_Url__c);
-```
-
-#### 2. Form Manager List View - Copy URL Action
-- [ ] Go to **Form Manager** tab
-- [ ] Click the **dropdown menu** (▼) on any form row
-- [ ] Verify **"Copy URL"** action appears in the menu
-- [ ] Click **"Copy URL"**
-- [ ] Verify toast: "URL copied to clipboard" (success) OR "No URL available..." (warning if no Site configured)
-- [ ] Paste the URL somewhere to verify it copied correctly
-- [ ] Verify URL format: `https://[site-domain]/apex/CaseFormPage?form=[form-name]`
-
-#### 3. Form Manager List View - View Live Action
-- [ ] Click **"View Live"** from the row action menu
-- [ ] Verify it opens the correct **public Site URL** (not internal Salesforce URL)
-- [ ] Verify the form loads correctly
-
-#### 4. New Form - Site Dropdown & Public URL
-- [ ] Click **"+ New Form"** button
-- [ ] Verify **Site** dropdown appears (with "Use Default Site" placeholder)
-- [ ] Verify **Public URL** section appears
-- [ ] If default Site is configured: verify URL is displayed with copy button
-- [ ] If no default Site: verify warning "No default Site configured. Run the Setup Wizard first."
-- [ ] Click the **copy button** next to the URL (if shown)
-- [ ] Verify toast confirms URL copied
-
-#### 5. Edit Form - Site Dropdown & Public URL
-- [ ] Edit an existing form (click form name or use Edit action)
-- [ ] Verify **Site** dropdown appears with current setting
-- [ ] Verify **Public URL** section shows the correct URL
-- [ ] Change the Site dropdown to a different Site
-- [ ] Verify URL updates immediately
-- [ ] Save the form
-- [ ] Reload and verify Site selection persisted
-
-#### 6. Per-Form Site Override
-- [ ] Create/edit a form
-- [ ] Select a **specific Site** (not "Use Default Site")
-- [ ] Save the form
-- [ ] Verify the form's URL uses that specific Site's domain
-- [ ] Change back to "Use Default Site"
-- [ ] Verify URL reverts to using the default Site's domain
-
-#### 7. Edge Cases
-- [ ] **No Sites in org**: Verify graceful handling (empty dropdown, warning message)
-- [ ] **Special characters in form name**: Create form with spaces/special chars, verify URL is properly encoded
-- [ ] **Re-run Setup Wizard**: Select different Site, verify default updates
-
-### Expected Behavior Summary
-
-| Scenario | Expected Result |
-|----------|-----------------|
-| Default Site configured | URLs display correctly everywhere |
-| No default Site | Warning message, "Copy URL" shows toast warning |
-| Per-form Site override | Form uses override Site, not default |
-| "Use Default Site" selected | Form uses org-wide default |
-| Special chars in form name | URL-encoded (e.g., `my%20form`) |
+### reCAPTCHA v3 Testing
+- [ ] Create reCAPTCHA v3 keys at Google Admin Console (select "v3")
+- [ ] Configure v3 in Setup Wizard (select "v3 Score-based" type)
+- [ ] Test form submission with v3 - verify invisible badge appears
+- [ ] Verify low-score submissions are blocked (use VPN/incognito to simulate bot-like behavior)
+- [ ] Test switching between v2 Checkbox, v2 Invisible, and v3 Score-based
 
 ---
 
@@ -91,12 +21,12 @@ System.debug('Default Base URL: ' + s.Default_Site_Base_Url__c);
 
 | | |
 |---|---|
-| **Version** | v0.4.5 |
+| **Version** | v0.4.7 |
 | **Phases Complete** | 0-3 (MVP, Admin UI, Setup Wizard, reCAPTCHA) |
 | **Next Up** | Phase 4 (Embeddable widget, multi-file upload) |
 | **Dev Org** | `devorg` (tilman.dietrich@gmail.com.dev) |
 | **GitHub** | https://github.com/tilman-d/salesforce-webtocase |
-| **Last Change** | URL Display Feature: Site dropdown, Public URL with copy button, Copy URL row action |
+| **Last Change** | Image compression (up to 25MB) with fixed file limits |
 
 ---
 
@@ -368,8 +298,8 @@ Form__c form = new Form__c(
     Success_Message__c = 'Thank you! Your case has been submitted.',
     Active__c = true,
     Enable_File_Upload__c = true,
-    Max_File_Size_MB__c = 10,
     Enable_Captcha__c = true  // Enable CAPTCHA
+    // Note: File limits are fixed (Images: 25MB auto-compressed, Documents: 2MB)
 );
 insert form;
 
@@ -405,7 +335,7 @@ On the Site detail page → Public Access Settings:
 | ContentDocumentLink | | ✓ |
 | Error_Log__c | | ✓ |
 
-**Field Permissions (Form__c):** Read access to Description__c, Enable_File_Upload__c, Max_File_Size_MB__c, Success_Message__c, Enable_Captcha__c
+**Field Permissions (Form__c):** Read access to Description__c, Enable_File_Upload__c, Success_Message__c, Enable_Captcha__c
 
 **Field Permissions (Form_Field__c):** Read access to Required__c
 
@@ -495,7 +425,8 @@ force-app/main/default/
 │   └── CaseFormPage.page                # + reCAPTCHA widget (Phase 3)
 ├── staticresources/
 │   ├── caseFormStyles.css               # + CAPTCHA styles (Phase 3)
-│   └── caseFormScript.js                # + CAPTCHA handling (Phase 3)
+│   ├── caseFormScript.js                # + compression & validation
+│   └── imageCompression.js              # browser-image-compression library
 ├── remoteSiteSettings/
 │   └── Google_reCAPTCHA.remoteSite-meta.xml  # Phase 3
 └── permissionsets/
@@ -539,6 +470,35 @@ force-app/main/default/
 
 ## Changelog
 
+### v0.4.7 (2026-02-02) - Image Compression & Fixed File Limits
+- **Image compression**: Images up to 25MB are automatically compressed to ~0.7MB before upload
+  - Uses browser-image-compression library for client-side compression
+  - Converts HEIC/PNG/WebP/BMP to JPEG for optimal size
+  - Shows "Optimizing..." progress during compression
+  - Compression target (0.7MB) ensures single-request upload without chunking
+- **Fixed file limits**: Removed user-configurable "Max File Size" setting
+  - Images: Up to 25MB (auto-compressed)
+  - Documents (PDF, Word, etc.): Up to 2MB
+  - Videos: Not supported (users prompted to email separately)
+- **Simplified UX**: "Enable File Upload" checkbox now shows help text with limits
+  - "Images: up to 25MB (auto-compressed) | Documents: up to 2MB"
+- **New static resource**: `imageCompression.js` - browser-image-compression library (v2.0.2)
+- **Removed**: "Max Document Size (MB)" input field from Form Manager
+
+### v0.4.6 (2026-02-02) - Chunked File Upload Fix
+- **Fixed:** Files larger than ~1.5MB could not be uploaded due to Salesforce Visualforce Remoting payload limits
+- **Solution:** Implemented chunked file uploads for large files
+  - Files ≤750KB: Uploaded in single request (as before)
+  - Files >750KB: Automatically split into 750KB chunks and uploaded sequentially
+  - Chunks are stored temporarily as ContentVersions, then assembled into final file
+  - Chunk files are automatically cleaned up after assembly
+- **New Apex methods:**
+  - `uploadFileChunk(caseId, fileName, chunkData, chunkIndex, totalChunks, uploadKey)` - Handles chunk uploads
+  - `getChunkSize()` - Returns chunk size for JavaScript reference
+- **Updated JavaScript:** Added chunking logic, progress indicator during multi-chunk uploads
+- **Test coverage:** 6 new unit tests for chunked upload scenarios
+- **Note:** The `Max_File_Size_MB__c` setting now actually works for files up to the configured limit (previously limited to ~2MB)
+
 ### v0.4.5 (2026-01-29) - URL Display Feature
 - **Site dropdown** added to Form Detail editor (new/edit form views)
   - Select per-form Site override or use org-wide default
@@ -557,7 +517,7 @@ force-app/main/default/
   - `reCAPTCHA_Settings__c.Default_Site_Base_Url__c` - Cached base URL
   - `Form__c.Site_Id__c` - Per-form Site override
 - **URL encoding** for form names with special characters
-- 137 Apex tests passing
+- 143 Apex tests passing
 
 ### v0.4.4 (2026-01-29) - UX Improvements
 - **Setup Wizard Complete step**: Consolidated from 4 boxes to 2 boxes for cleaner UX
@@ -642,36 +602,7 @@ force-app/main/default/
 
 ## Manual Testing Still Needed
 
-The following items require manual verification before release:
-
-### reCAPTCHA v3 Testing
-- [ ] Create reCAPTCHA v3 keys at Google Admin Console (select "v3")
-- [ ] Configure v3 in Setup Wizard (select "v3 Score-based" type)
-- [ ] Test form submission with v3 - verify invisible badge appears
-- [ ] Verify low-score submissions are blocked (use VPN/incognito to simulate bot-like behavior)
-- [ ] Test that default threshold (0.3) works correctly
-- [ ] Optionally: adjust threshold via Custom Metadata and verify it takes effect
-
-### reCAPTCHA Type Switching
-- [ ] Test switching between v2 Checkbox, v2 Invisible, and v3 Score-based
-- [ ] Verify each type renders correctly on the public form
-- [ ] Verify form submission works with each type
-
-### Setup Wizard End-to-End
-- [ ] Fresh org: complete full wizard flow from step 1 to 6
-- [ ] Verify precondition checks work correctly
-- [ ] Verify Site selection works
-- [ ] Verify permission configuration works
-- [ ] Verify validation step catches missing permissions
-- [ ] Verify reCAPTCHA configuration saves correctly
-- [ ] Verify sample form creation works
-- [ ] Test the public form URL from the Complete step
-
-### Form Manager
-- [ ] Create new form with CAPTCHA enabled
-- [ ] Edit existing form - toggle CAPTCHA on/off
-- [ ] Verify "View Live" button opens correct URL
-- [ ] Test form field reordering
+See the **🧪 MANUAL TESTING REQUIRED** section at the top of this README for the current testing checklist.
 
 ---
 
@@ -679,15 +610,23 @@ The following items require manual verification before release:
 
 **Status:** Phases 0-3 complete and polished. Ready for Phase 4.
 
-**Recent changes (v0.4.4):**
-- Setup Wizard Complete step simplified (4 boxes → 2 boxes)
-- Form Manager now has sortable columns and "Created" date column
-- Various UX bug fixes (dropdown overflow, CreatedDate query)
+**Recent changes (v0.4.7):**
+- Image compression: Images up to 25MB auto-compressed to ~0.7MB
+- Fixed file limits: Images 25MB, Documents 2MB (no longer user-configurable)
+- Simplified UX: Removed "Max Document Size" field, added help text instead
+
+**File size limits (fixed):**
+| File Type | Limit | Behavior |
+|-----------|-------|----------|
+| Images (JPEG, PNG, HEIC, WebP, BMP) | 25MB | Auto-compressed to ~0.7MB |
+| Documents (PDF, Word, etc.) | 2MB | Hard limit |
+| Videos | N/A | Not supported |
 
 **Key architecture notes:**
 - Forms are **org-wide** (not tied to specific Sites)
 - Sites are just public entry points - any configured Site can serve any form
 - Users can run the Setup Wizard multiple times for different Sites
+- Image compression happens client-side using browser-image-compression library
 
 **Dev org:** `tilman.dietrich@gmail.com.dev` (alias: `devorg`)
 
@@ -808,11 +747,12 @@ When creating the managed/unlocked package for AppExchange, include the followin
 |------|-------------|
 | `CaseFormPage` | Public form page |
 
-### Static Resources (2)
+### Static Resources (3)
 | Resource | Description |
 |----------|-------------|
 | `caseFormStyles` | Form CSS styling |
-| `caseFormScript` | Form JavaScript |
+| `caseFormScript` | Form JavaScript (validation, compression, submission) |
+| `imageCompression` | browser-image-compression library for client-side image optimization |
 
 ### Lightning App (1)
 | App | API Name |
@@ -880,6 +820,7 @@ When creating the managed/unlocked package for AppExchange, include the followin
     <types>
         <members>caseFormStyles</members>
         <members>caseFormScript</members>
+        <members>imageCompression</members>
         <name>StaticResource</name>
     </types>
     <types>

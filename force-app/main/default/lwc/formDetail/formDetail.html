@@ -106,23 +106,18 @@
                                 onchange={handleActiveChange}>
                             </lightning-input>
                         </div>
-                        <div class="slds-col slds-size_1-of-1 slds-medium-size_1-of-3 slds-p-bottom_small">
+                        <div class="slds-col slds-size_1-of-1 slds-medium-size_1-of-2 slds-p-bottom_small">
                             <lightning-input
                                 type="checkbox"
                                 label="Enable File Upload"
                                 checked={form.enableFileUpload}
                                 onchange={handleFileUploadChange}>
                             </lightning-input>
-                        </div>
-                        <div class="slds-col slds-size_1-of-1 slds-medium-size_1-of-3 slds-p-bottom_small">
-                            <lightning-input
-                                type="number"
-                                label="Max File Size (MB)"
-                                value={form.maxFileSizeMB}
-                                onchange={handleMaxFileSizeChange}
-                                min="1"
-                                max="25">
-                            </lightning-input>
+                            <template if:true={form.enableFileUpload}>
+                                <p class="slds-text-color_weak slds-text-body_small slds-m-top_x-small">
+                                    Images: up to 25MB (auto-compressed) | Documents: up to 2MB
+                                </p>
+                            </template>
                         </div>
                         <div class="slds-col slds-size_1-of-1 slds-p-bottom_small slds-p-top_small">
                             <lightning-input
@@ -139,11 +134,11 @@
                             <lightning-combobox
                                 name="site"
                                 label="Site"
-                                placeholder="Use Default Site"
+                                placeholder="Select a Site"
                                 options={siteOptions}
-                                value={form.siteId}
+                                value={effectiveSiteId}
                                 onchange={handleSiteChange}
-                                field-level-help="Override the Site for this form's URL, or leave as default.">
+                                field-level-help="Select the Site for this form's public URL.">
                             </lightning-combobox>
                         </div>
 

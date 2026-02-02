@@ -32,7 +32,7 @@ export default class FormDetail extends LightningElement {
         description: '',
         active: false,
         enableFileUpload: false,
-        maxFileSizeMB: 10,
+        maxFileSizeMB: 25, // Fixed: 25MB for images (auto-compressed), 2MB for documents (enforced in frontend)
         successMessage: '',
         enableCaptcha: false,
         siteId: null,
@@ -109,7 +109,7 @@ export default class FormDetail extends LightningElement {
                         description: result.description || '',
                         active: result.active || false,
                         enableFileUpload: result.enableFileUpload || false,
-                        maxFileSizeMB: result.maxFileSizeMB || 10,
+                        maxFileSizeMB: 25, // Fixed: 25MB for images, 2MB for documents (enforced in frontend)
                         successMessage: result.successMessage || '',
                         enableCaptcha: result.enableCaptcha || false,
                         siteId: result.siteId || null,
@@ -137,7 +137,7 @@ export default class FormDetail extends LightningElement {
                 description: '',
                 active: false,
                 enableFileUpload: false,
-                maxFileSizeMB: 10,
+                maxFileSizeMB: 25, // Fixed: 25MB for images, 2MB for documents (enforced in frontend)
                 successMessage: '',
                 enableCaptcha: false,
                 siteId: null,
@@ -182,16 +182,23 @@ export default class FormDetail extends LightningElement {
     }
 
     get siteOptions() {
-        const options = [{ label: 'Use Default Site', value: '' }];
+        const options = [];
         if (this.sites && this.sites.length > 0) {
             this.sites.forEach(site => {
+                const isDefault = this.defaultSiteId && site.id === this.defaultSiteId;
                 options.push({
-                    label: site.masterLabel,
+                    label: isDefault ? site.masterLabel + ' (Default)' : site.masterLabel,
                     value: site.id
                 });
             });
         }
         return options;
+    }
+
+    get effectiveSiteId() {
+        // If form has explicit siteId, use it
+        // Otherwise fall back to default
+        return this.form.siteId || this.defaultSiteId || '';
     }
 
     get computedPublicUrl() {
@@ -255,11 +262,6 @@ export default class FormDetail extends LightningElement {
 
     handleFileUploadChange(event) {
         this.form.enableFileUpload = event.target.checked;
-        this.hasUnsavedChanges = true;
-    }
-
-    handleMaxFileSizeChange(event) {
-        this.form.maxFileSizeMB = event.target.value;
         this.hasUnsavedChanges = true;
     }
 

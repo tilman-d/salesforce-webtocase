@@ -890,4 +890,204 @@ private class CaseFormControllerTest {
 
         System.assertEquals(true, result.get('success'), 'Submission should succeed with score above custom threshold');
     }
+
+    /**
+     * Test submitForm returns caseId for chunked uploads
+     */
+    @isTest
+    static void testSubmitFormReturnsCaseId() {
+        Form__c testForm = [SELECT Id FROM Form__c WHERE Form_Name__c = 'test-form' LIMIT 1];
+
+        Map<String, String> fieldValues = new Map<String, String>{
+            'Subject' => 'Test CaseId Return'
+        };
+
+        Test.startTest();
+        Map<String, Object> result = CaseFormController.submitForm(
+            testForm.Id,
+            fieldValues,
+            '',
+            '',
+            ''
+        );
+        Test.stopTest();
+
+        System.assertEquals(true, result.get('success'), 'Submission should succeed');
+        System.assertNotEquals(null, result.get('caseId'), 'caseId should be returned');
+        System.assertNotEquals(null, result.get('caseNumber'), 'caseNumber should be returned');
+    }
+
+    /**
+     * Test chunked file upload - single chunk (small file)
+     */
+    @isTest
+    static void testUploadFileChunkSingleChunk() {
+        // Create a Case first
+        Case testCase = new Case(Subject = 'Test Chunked Upload', Status = 'New');
+        insert testCase;
+
+        String fileName = 'test-small-file.txt';
+        String fileContent = 'Hello World - Small File Content';
+        String base64Content = EncodingUtil.base64Encode(Blob.valueOf(fileContent));
+        String uploadKey = 'test-upload-key-123';
+
+        Test.startTest();
+        Map<String, Object> result = CaseFormController.uploadFileChunk(
+            testCase.Id,
+            fileName,
+            base64Content,
+            0,  // First chunk (0-indexed)
+            1,  // Total 1 chunk
+            uploadKey
+        );
+        Test.stopTest();
+
+        System.assertEquals(true, result.get('success'), 'Chunk upload should succeed');
+        System.assertEquals(true, result.get('complete'), 'Single chunk should complete the upload');
+
+        // Verify file was attached
+        List<ContentDocumentLink> cdls = [
+            SELECT ContentDocumentId
+            FROM ContentDocumentLink
+            WHERE LinkedEntityId = :testCase.Id
+        ];
+        System.assertEquals(1, cdls.size(), 'File should be attached to case');
+
+        // Verify file content
+        ContentVersion cv = [
+            SELECT Title, VersionData
+            FROM ContentVersion
+            WHERE ContentDocumentId = :cdls[0].ContentDocumentId
+            AND IsLatest = true
+        ];
+        System.assertEquals(fileName, cv.Title, 'File name should match');
+        System.assertEquals(fileContent, cv.VersionData.toString(), 'File content should match');
+    }
+
+    /**
+     * Test chunked file upload - multiple chunks
+     */
+    @isTest
+    static void testUploadFileChunkMultipleChunks() {
+        // Create a Case first
+        Case testCase = new Case(Subject = 'Test Multi-Chunk Upload', Status = 'New');
+        insert testCase;
+
+        String fileName = 'test-large-file.txt';
+        String uploadKey = 'test-multi-chunk-key';
+
+        // Simulate a file split into 3 chunks
+        String chunk1Data = EncodingUtil.base64Encode(Blob.valueOf('Chunk 1 Data - '));
+        String chunk2Data = EncodingUtil.base64Encode(Blob.valueOf('Chunk 2 Data - '));
+        String chunk3Data = EncodingUtil.base64Encode(Blob.valueOf('Chunk 3 Data'));
+
+        Test.startTest();
+
+        // Upload chunk 1
+        Map<String, Object> result1 = CaseFormController.uploadFileChunk(
+            testCase.Id, fileName, chunk1Data, 0, 3, uploadKey
+        );
+        System.assertEquals(true, result1.get('success'), 'Chunk 1 should succeed');
+        System.assertEquals(false, result1.get('complete'), 'Should not be complete after chunk 1');
+
+        // Upload chunk 2
+        Map<String, Object> result2 = CaseFormController.uploadFileChunk(
+            testCase.Id, fileName, chunk2Data, 1, 3, uploadKey
+        );
+        System.assertEquals(true, result2.get('success'), 'Chunk 2 should succeed');
+        System.assertEquals(false, result2.get('complete'), 'Should not be complete after chunk 2');
+
+        // Upload chunk 3 (last)
+        Map<String, Object> result3 = CaseFormController.uploadFileChunk(
+            testCase.Id, fileName, chunk3Data, 2, 3, uploadKey
+        );
+        System.assertEquals(true, result3.get('success'), 'Chunk 3 should succeed');
+        System.assertEquals(true, result3.get('complete'), 'Should be complete after last chunk');
+
+        Test.stopTest();
+
+        // Verify file was attached
+        List<ContentDocumentLink> cdls = [
+            SELECT ContentDocumentId
+            FROM ContentDocumentLink
+            WHERE LinkedEntityId = :testCase.Id
+        ];
+        System.assertEquals(1, cdls.size(), 'File should be attached to case');
+
+        // Verify combined content
+        ContentVersion cv = [
+            SELECT Title, VersionData
+            FROM ContentVersion
+            WHERE ContentDocumentId = :cdls[0].ContentDocumentId
+            AND IsLatest = true
+        ];
+        System.assertEquals(fileName, cv.Title, 'File name should match');
+        System.assertEquals('Chunk 1 Data - Chunk 2 Data - Chunk 3 Data', cv.VersionData.toString(), 'Combined content should match');
+
+        // Verify chunk files were cleaned up
+        List<ContentVersion> chunks = [
+            SELECT Id FROM ContentVersion WHERE Title LIKE :('__chunk__' + uploadKey + '%')
+        ];
+        System.assertEquals(0, chunks.size(), 'Chunk files should be deleted after assembly');
+    }
+
+    /**
+     * Test chunked upload with missing parameters
+     */
+    @isTest
+    static void testUploadFileChunkMissingParams() {
+        Test.startTest();
+
+        // Missing caseId
+        Map<String, Object> result1 = CaseFormController.uploadFileChunk(
+            '', 'file.txt', 'data', 0, 1, 'key'
+        );
+        System.assertEquals(false, result1.get('success'), 'Should fail with missing caseId');
+
+        // Missing fileName
+        Map<String, Object> result2 = CaseFormController.uploadFileChunk(
+            'a00000000000001', '', 'data', 0, 1, 'key'
+        );
+        System.assertEquals(false, result2.get('success'), 'Should fail with missing fileName');
+
+        // Missing uploadKey
+        Map<String, Object> result3 = CaseFormController.uploadFileChunk(
+            'a00000000000001', 'file.txt', 'data', 0, 1, ''
+        );
+        System.assertEquals(false, result3.get('success'), 'Should fail with missing uploadKey');
+
+        Test.stopTest();
+    }
+
+    /**
+     * Test chunked upload with invalid case ID
+     */
+    @isTest
+    static void testUploadFileChunkInvalidCaseId() {
+        Test.startTest();
+        Map<String, Object> result = CaseFormController.uploadFileChunk(
+            '500000000000000', // Non-existent case
+            'file.txt',
+            EncodingUtil.base64Encode(Blob.valueOf('test')),
+            0,
+            1,
+            'test-key'
+        );
+        Test.stopTest();
+
+        System.assertEquals(false, result.get('success'), 'Should fail with invalid case ID');
+        System.assert(((String)result.get('error')).contains('Case not found'), 'Error should mention case not found');
+    }
+
+    /**
+     * Test getChunkSize returns expected value
+     */
+    @isTest
+    static void testGetChunkSize() {
+        Test.startTest();
+        Integer chunkSize = CaseFormController.getChunkSize();
+        Test.stopTest();
+
+        System.assertEquals(750000, chunkSize, 'Chunk size should be 750000 bytes');
+    }
 }

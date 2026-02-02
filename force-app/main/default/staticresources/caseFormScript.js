@@ -1,6 +1,7 @@
 /**
  * Web-to-Case Form Script
- * Handles form validation, file upload, reCAPTCHA (v2 Checkbox, v2 Invisible, v3 Score), and submission via Visualforce Remoting
+ * Handles form validation, file upload (including chunked uploads for large files),
+ * reCAPTCHA (v2 Checkbox, v2 Invisible, v3 Score), and submission via Visualforce Remoting
  */
 (function() {
     'use strict';
@@ -13,6 +14,148 @@
             captchaResolve = null;
         }
     };
+
+    // Chunk size for large file uploads (750KB to stay under VF Remoting limits)
+    // When base64 encoded, this becomes ~1MB
+    var CHUNK_SIZE = 750000;
+
+    // Image compression settings
+    // Target 0.7MB raw -> ~0.93MB base64 (fits in single request under 1MB VF Remoting limit)
+    // This avoids chunked upload which has reliability issues with guest users
+    var TARGET_SIZE_MB = 0.7;
+    var MAX_IMAGE_SIZE = 25 * 1024 * 1024; // 25MB for images (will be compressed)
+    var MAX_DOC_SIZE = 2 * 1024 * 1024;    // 2MB for non-image files
+
+    // Supported image MIME types for compression
+    var SUPPORTED_IMAGE_TYPES = [
+        'image/jpeg',
+        'image/png',
+        'image/webp',
+        'image/bmp',
+        'image/heic',
+        'image/heif'
+    ];
+
+    /**
+     * Check if file is a supported image type
+     */
+    function isSupportedImage(file) {
+        // Check MIME type first
+        if (SUPPORTED_IMAGE_TYPES.indexOf(file.type) !== -1) {
+            return true;
+        }
+        // Fallback to extension check (for cases where MIME type is missing)
+        var fileName = file.name.toLowerCase();
+        return /\.(jpg|jpeg|png|webp|bmp|heic|heif)$/.test(fileName);
+    }
+
+    /**
+     * Check if file is a video
+     */
+    function isVideo(file) {
+        return file.type && file.type.startsWith('video/');
+    }
+
+    /**
+     * Validate file before processing
+     * @returns {Object} { valid: boolean, error: string|null }
+     */
+    function validateFile(file) {
+        // Videos not supported
+        if (isVideo(file)) {
+            return {
+                valid: false,
+                error: 'Video files are not supported. Please email your video to support after submitting this form.'
+            };
+        }
+
+        // Image files: max 25MB (will be compressed)
+        if (isSupportedImage(file) && file.size > MAX_IMAGE_SIZE) {
+            return {
+                valid: false,
+                error: 'Image too large. Images must be under 25MB.'
+            };
+        }
+
+        // Non-image files: max 2MB
+        if (!isSupportedImage(file) && file.size > MAX_DOC_SIZE) {
+            return {
+                valid: false,
+                error: 'File too large. Documents must be under 2MB. For larger files, please email them after submitting.'
+            };
+        }
+
+        return { valid: true };
+    }
+
+    /**
+     * Update submit button text (used for compression progress)
+     */
+    function updateButtonText(text) {
+        var submitButton = document.getElementById('submitButton');
+        if (submitButton) {
+            submitButton.textContent = text;
+        }
+    }
+
+    /**
+     * Compress image if needed (uses browser-image-compression library)
+     * Only compresses images larger than TARGET_SIZE_MB
+     * @param {File} file - The file to potentially compress
+     * @returns {Promise<File|Blob>} - The original or compressed file
+     */
+    function compressImageIfNeeded(file) {
+        return new Promise(function(resolve, reject) {
+            // Not an image? Return as-is
+            if (!isSupportedImage(file)) {
+                resolve(file);
+                return;
+            }
+
+            // Already under target size? No compression needed
+            var targetBytes = TARGET_SIZE_MB * 1024 * 1024;
+            if (file.size <= targetBytes) {
+                console.log('CaseForm: Image already under ' + TARGET_SIZE_MB + 'MB, no compression needed');
+                resolve(file);
+                return;
+            }
+
+            // Check if imageCompression library is available
+            if (typeof imageCompression === 'undefined') {
+                console.warn('CaseForm: imageCompression library not loaded, using original file');
+                resolve(file);
+                return;
+            }
+
+            updateButtonText('Optimizing image...');
+            var originalSizeMB = (file.size / 1024 / 1024).toFixed(1);
+            console.log('CaseForm: Compressing image from ' + originalSizeMB + 'MB');
+
+            var options = {
+                maxSizeMB: TARGET_SIZE_MB,
+                maxWidthOrHeight: 2560,       // Prevent huge canvas (OOM protection on mobile)
+                useWebWorker: true,           // Non-blocking compression
+                initialQuality: 0.85,         // Start at 85% quality, reduce if needed
+                preserveExif: false,          // Strip EXIF for privacy (GPS, device info)
+                fileType: 'image/jpeg',       // Convert HEIC/PNG to JPEG for smaller size
+                onProgress: function(progress) {
+                    updateButtonText('Optimizing... ' + Math.round(progress) + '%');
+                }
+            };
+
+            imageCompression(file, options)
+                .then(function(compressedFile) {
+                    var compressedSizeMB = (compressedFile.size / 1024 / 1024).toFixed(1);
+                    console.log('CaseForm: Compressed ' + originalSizeMB + 'MB → ' + compressedSizeMB + 'MB');
+                    resolve(compressedFile);
+                })
+                .catch(function(error) {
+                    console.error('CaseForm: Compression failed, using original:', error);
+                    // Fallback: return original file (may fail at upload, but let server handle it)
+                    resolve(file);
+                });
+        });
+    }
 
     // Wait for DOM to be ready
     document.addEventListener('DOMContentLoaded', init);
@@ -143,13 +286,7 @@
         var fileInput = document.getElementById('fileInput');
         var hasFile = fileInput && fileInput.files && fileInput.files.length > 0;
         var file = hasFile ? fileInput.files[0] : null;
-
-        // Validate file size if file present
-        if (file && file.size > formConfig.maxFileSize) {
-            var maxMB = Math.round(formConfig.maxFileSize / 1024 / 1024);
-            showError('File size exceeds the maximum allowed (' + maxMB + ' MB).');
-            return;
-        }
+        // File validation (size limits) handled in processSubmission via validateFile()
 
         setLoading(true);
 
@@ -187,15 +324,200 @@
      */
     function processSubmission(form, fieldValues, file, captchaToken) {
         if (file) {
-            readFileAsBase64(file, function(base64Content) {
-                submitToSalesforce(fieldValues, file.name, base64Content, captchaToken);
-            }, function(error) {
+            // Validate file first
+            var validation = validateFile(file);
+            if (!validation.valid) {
                 setLoading(false);
-                showError('Error reading file: ' + error);
-            });
+                showError(validation.error);
+                return;
+            }
+
+            // Compress if image, then upload
+            compressImageIfNeeded(file)
+                .then(function(processedFile) {
+                    // Determine the correct filename (update extension if converted to JPEG)
+                    var fileName = file.name;
+                    if (processedFile !== file && processedFile.type === 'image/jpeg') {
+                        fileName = fileName.replace(/\.(heic|heif|png|webp|bmp)$/i, '.jpg');
+                    }
+
+                    // Check if processed file needs chunked upload
+                    if (processedFile.size > CHUNK_SIZE) {
+                        console.log('CaseForm: Large file detected (' + Math.round(processedFile.size / 1024) + 'KB), using chunked upload');
+                        // For large files: submit form first (without file), then upload chunks
+                        submitFormThenUploadChunks(fieldValues, processedFile, fileName, captchaToken);
+                    } else {
+                        // Small file: use original single-request method
+                        readFileAsBase64(processedFile, function(base64Content) {
+                            submitToSalesforce(fieldValues, fileName, base64Content, captchaToken);
+                        }, function(error) {
+                            setLoading(false);
+                            showError('Error reading file: ' + error);
+                        });
+                    }
+                })
+                .catch(function(error) {
+                    setLoading(false);
+                    showError('Error processing file: ' + error.message);
+                });
         } else {
             submitToSalesforce(fieldValues, '', '', captchaToken);
         }
+    }
+
+    /**
+     * Generate a UUID for upload session tracking
+     */
+    function generateUUID() {
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+            var r = Math.random() * 16 | 0;
+            var v = c === 'x' ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
+        });
+    }
+
+    /**
+     * Submit form without file, then upload file in chunks
+     * @param {Object} fieldValues - Form field values
+     * @param {File|Blob} file - The file to upload (may be compressed)
+     * @param {string} fileName - The filename to use (may have updated extension)
+     * @param {string} captchaToken - reCAPTCHA token
+     */
+    function submitFormThenUploadChunks(fieldValues, file, fileName, captchaToken) {
+        console.log('CaseForm: Submitting form data first (without file)...');
+
+        // First, submit the form without the file to create the Case
+        Visualforce.remoting.Manager.invokeAction(
+            formConfig.remoteAction,
+            formConfig.formId,
+            fieldValues,
+            '', // No file name
+            '', // No file content
+            captchaToken || '',
+            function(result, event) {
+                if (event.status && result && result.success) {
+                    var caseNumber = result.caseNumber;
+                    console.log('CaseForm: Case created:', caseNumber, '- now uploading file in chunks');
+
+                    // Get the Case ID by querying (we need it for file attachment)
+                    // The result contains caseNumber, we need to get caseId
+                    // Actually, we need to modify the controller to return caseId too
+                    // For now, let's use a workaround: query for the case
+                    // Better approach: modify submitForm to return caseId
+
+                    // We'll need to get the caseId - let's add it to the response
+                    if (result.caseId) {
+                        uploadFileInChunks(result.caseId, file, fileName, caseNumber);
+                    } else {
+                        // Fallback: show success but note file wasn't attached
+                        console.warn('CaseForm: Case created but caseId not returned, cannot attach file');
+                        setLoading(false);
+                        showSuccess(caseNumber);
+                        showError('Note: File could not be attached due to size limits.');
+                    }
+                } else {
+                    setLoading(false);
+                    var errorMsg = result && result.error ? result.error : 'Failed to submit form.';
+                    console.error('CaseForm: Form submission failed -', errorMsg);
+                    showError(errorMsg);
+                    if (formConfig.enableCaptcha) {
+                        resetCaptcha();
+                    }
+                }
+            },
+            { escape: false, timeout: 120000 }
+        );
+    }
+
+    /**
+     * Upload file in chunks
+     * @param {string} caseId - The Salesforce Case ID
+     * @param {File|Blob} file - The file to upload
+     * @param {string} fileName - The filename to use
+     * @param {string} caseNumber - The Case number for display
+     */
+    function uploadFileInChunks(caseId, file, fileName, caseNumber) {
+        var uploadKey = generateUUID();
+        var totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+
+        console.log('CaseForm: Starting chunked upload - ' + totalChunks + ' chunks, uploadKey:', uploadKey);
+
+        // Read file as ArrayBuffer for chunking
+        var reader = new FileReader();
+        reader.onload = function(e) {
+            var arrayBuffer = e.target.result;
+            uploadChunkSequentially(caseId, fileName, arrayBuffer, 0, totalChunks, uploadKey, caseNumber);
+        };
+        reader.onerror = function() {
+            setLoading(false);
+            showError('Error reading file for upload.');
+        };
+        reader.readAsArrayBuffer(file);
+    }
+
+    /**
+     * Upload chunks one at a time sequentially
+     */
+    function uploadChunkSequentially(caseId, fileName, arrayBuffer, chunkIndex, totalChunks, uploadKey, caseNumber) {
+        // Calculate chunk boundaries
+        var start = chunkIndex * CHUNK_SIZE;
+        var end = Math.min(start + CHUNK_SIZE, arrayBuffer.byteLength);
+        var chunkArrayBuffer = arrayBuffer.slice(start, end);
+
+        // Convert chunk to base64
+        var chunkBase64 = arrayBufferToBase64(chunkArrayBuffer);
+
+        console.log('CaseForm: Uploading chunk ' + (chunkIndex + 1) + '/' + totalChunks);
+
+        // Update loading text to show progress
+        var submitButton = document.getElementById('submitButton');
+        if (submitButton) {
+            submitButton.textContent = 'Uploading... ' + Math.round(((chunkIndex + 1) / totalChunks) * 100) + '%';
+        }
+
+        Visualforce.remoting.Manager.invokeAction(
+            formConfig.uploadChunkAction,
+            caseId,
+            fileName,
+            chunkBase64,
+            chunkIndex,
+            totalChunks,
+            uploadKey,
+            function(result, event) {
+                if (event.status && result && result.success) {
+                    if (result.complete) {
+                        // All chunks uploaded and file assembled
+                        console.log('CaseForm: File upload complete');
+                        setLoading(false);
+                        showSuccess(caseNumber);
+                    } else {
+                        // Upload next chunk
+                        uploadChunkSequentially(caseId, fileName, arrayBuffer, chunkIndex + 1, totalChunks, uploadKey, caseNumber);
+                    }
+                } else {
+                    setLoading(false);
+                    var errorMsg = result && result.error ? result.error : 'Failed to upload file chunk.';
+                    console.error('CaseForm: Chunk upload failed -', errorMsg);
+                    // Show success for case but warn about file
+                    showSuccess(caseNumber);
+                    showError('Your case was created, but the file could not be attached: ' + errorMsg);
+                }
+            },
+            { escape: false, timeout: 120000 }
+        );
+    }
+
+    /**
+     * Convert ArrayBuffer to Base64 string
+     */
+    function arrayBufferToBase64(buffer) {
+        var binary = '';
+        var bytes = new Uint8Array(buffer);
+        var len = bytes.byteLength;
+        for (var i = 0; i < len; i++) {
+            binary += String.fromCharCode(bytes[i]);
+        }
+        return window.btoa(binary);
     }
 
     /**

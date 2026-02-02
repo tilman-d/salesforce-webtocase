@@ -137,9 +137,12 @@
                     enableCaptcha: {!captchaEnabled},
                     captchaType: '{!JSENCODE(captchaType)}',
                     captchaSiteKey: '{!JSENCODE(captchaSiteKey)}',
-                    remoteAction: '{!$RemoteAction.CaseFormController.submitForm}'
+                    remoteAction: '{!$RemoteAction.CaseFormController.submitForm}',
+                    uploadChunkAction: '{!$RemoteAction.CaseFormController.uploadFileChunk}'
                 };
             </script>
+            <!-- Image compression library for large file handling -->
+            <apex:includeScript value="{!$Resource.imageCompression}"/>
             <apex:includeScript value="{!$Resource.caseFormScript}"/>
         </apex:outputPanel>
     </body>
