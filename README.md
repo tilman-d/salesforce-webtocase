@@ -21,12 +21,12 @@ The following reCAPTCHA items need manual verification before release:
 
 | | |
 |---|---|
-| **Version** | v0.4.7 |
+| **Version** | v0.4.8 |
 | **Phases Complete** | 0-3 (MVP, Admin UI, Setup Wizard, reCAPTCHA) |
 | **Next Up** | Phase 4 (Embeddable widget, multi-file upload) |
 | **Dev Org** | `devorg` (tilman.dietrich@gmail.com.dev) |
 | **GitHub** | https://github.com/tilman-d/salesforce-webtocase |
-| **Last Change** | Image compression (up to 25MB) with fixed file limits |
+| **Last Change** | Allow changing reCAPTCHA type without re-entering secret key |
 
 ---
 
@@ -470,6 +470,13 @@ force-app/main/default/
 
 ## Changelog
 
+### v0.4.8 (2026-02-02) - reCAPTCHA Type Change UX Fix
+- **Fixed:** Users can now change reCAPTCHA type (v2 Checkbox, v2 Invisible, v3 Score) without re-entering the secret key
+- Previously, the Setup Wizard required both Site Key and Secret Key to save any changes
+- Now, when reCAPTCHA is already configured, users can change just the type and click Save
+- Backend already supported partial updates (null values preserve existing) - this fix updates frontend validation to match
+- First-time setup still requires both keys (unchanged behavior)
+
 ### v0.4.7 (2026-02-02) - Image Compression & Fixed File Limits
 - **Image compression**: Images up to 25MB are automatically compressed to ~0.7MB before upload
   - Uses browser-image-compression library for client-side compression
@@ -610,10 +617,9 @@ See the **🧪 MANUAL TESTING REQUIRED** section at the top of this README for t
 
 **Status:** Phases 0-3 complete and polished. Ready for Phase 4.
 
-**Recent changes (v0.4.7):**
-- Image compression: Images up to 25MB auto-compressed to ~0.7MB
-- Fixed file limits: Images 25MB, Documents 2MB (no longer user-configurable)
-- Simplified UX: Removed "Max Document Size" field, added help text instead
+**Recent changes (v0.4.8):**
+- reCAPTCHA type can now be changed without re-entering secret key (when already configured)
+- Frontend validation updated to match backend's partial update support
 
 **File size limits (fixed):**
 | File Type | Limit | Behavior |

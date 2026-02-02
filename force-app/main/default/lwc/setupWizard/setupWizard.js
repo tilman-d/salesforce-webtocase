@@ -348,16 +348,20 @@ export default class SetupWizard extends LightningElement {
     }
 
     async handleSaveRecaptcha() {
-        if (!this.recaptchaSiteKey || !this.recaptchaSecretKey) {
-            this.showToast('Warning', 'Please enter both Site Key and Secret Key.', 'warning');
-            return;
+        // For initial setup, require both keys
+        // For updates when already configured, keys are optional (backend preserves existing)
+        if (!this.recaptchaConfigured) {
+            if (!this.recaptchaSiteKey || !this.recaptchaSecretKey) {
+                this.showToast('Warning', 'Please enter both Site Key and Secret Key.', 'warning');
+                return;
+            }
         }
 
         this.isLoading = true;
         try {
             const result = await saveReCaptchaSettings({
-                siteKey: this.recaptchaSiteKey,
-                secretKey: this.recaptchaSecretKey,
+                siteKey: this.recaptchaSiteKey || null,      // Pass null if empty (backend preserves existing)
+                secretKey: this.recaptchaSecretKey || null,  // Pass null if empty (backend preserves existing)
                 captchaType: this.recaptchaType,
                 scoreThreshold: null  // Uses default (0.3) from Custom Metadata field
             });
