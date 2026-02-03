@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Origin_Domain__c</fullName>
+    <description>The actual origin domain (for logging/debugging)</description>
+    <externalId>false</externalId>
+    <label>Origin Domain</label>
+    <length>255</length>
+    <required>false</required>
+    <type>Text</type>
+    <unique>false</unique>
+</CustomField>

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomObject xmlns="http://soap.sforce.com/2006/04/metadata">
+    <deploymentStatus>Deployed</deploymentStatus>
+    <description>Tracks rate limit counters for Web-to-Case embed API. Records are auto-purged by the system.</description>
+    <enableActivities>false</enableActivities>
+    <enableBulkApi>false</enableBulkApi>
+    <enableFeeds>false</enableFeeds>
+    <enableHistory>false</enableHistory>
+    <enableReports>false</enableReports>
+    <enableSearch>false</enableSearch>
+    <enableSharing>false</enableSharing>
+    <enableStreamingApi>false</enableStreamingApi>
+    <externalSharingModel>Private</externalSharingModel>
+    <label>Rate Limit Counter</label>
+    <nameField>
+        <displayFormat>RL-{00000}</displayFormat>
+        <label>Rate Limit Name</label>
+        <type>AutoNumber</type>
+    </nameField>
+    <pluralLabel>Rate Limit Counters</pluralLabel>
+    <sharingModel>ReadWrite</sharingModel>
+</CustomObject>

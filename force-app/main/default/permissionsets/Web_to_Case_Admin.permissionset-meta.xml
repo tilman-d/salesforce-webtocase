@@ -30,6 +30,15 @@
         <object>Error_Log__c</object>
         <viewAllRecords>true</viewAllRecords>
     </objectPermissions>
+    <objectPermissions>
+        <allowCreate>true</allowCreate>
+        <allowDelete>true</allowDelete>
+        <allowEdit>true</allowEdit>
+        <allowRead>true</allowRead>
+        <modifyAllRecords>true</modifyAllRecords>
+        <object>Rate_Limit_Counter__c</object>
+        <viewAllRecords>true</viewAllRecords>
+    </objectPermissions>
     <fieldPermissions>
         <editable>true</editable>
         <field>Form__c.Description__c</field>
@@ -63,6 +72,11 @@
     <fieldPermissions>
         <editable>true</editable>
         <field>Form__c.Site_Id__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
+        <field>Form__c.Allowed_Domains__c</field>
         <readable>true</readable>
     </fieldPermissions>
     <fieldPermissions>
@@ -103,6 +117,18 @@
     </classAccesses>
     <classAccesses>
         <apexClass>SetupWizardController</apexClass>
+        <enabled>true</enabled>
+    </classAccesses>
+    <classAccesses>
+        <apexClass>WebToCaseRestAPI</apexClass>
+        <enabled>true</enabled>
+    </classAccesses>
+    <classAccesses>
+        <apexClass>WebToCaseNonceService</apexClass>
+        <enabled>true</enabled>
+    </classAccesses>
+    <classAccesses>
+        <apexClass>WebToCaseRateLimiter</apexClass>
         <enabled>true</enabled>
     </classAccesses>
     <tabSettings>

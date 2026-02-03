@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Allowed_Domains__c</fullName>
+    <description>Newline-separated list of domains allowed to embed this form. Example: example.com&#10;mysite.org&#10;Leave empty to disable external embedding (form can only be hosted on Salesforce Site).</description>
+    <externalId>false</externalId>
+    <inlineHelpText>Enter one domain per line (e.g., example.com). Leave empty to disable external embedding.</inlineHelpText>
+    <label>Allowed Domains</label>
+    <length>5000</length>
+    <required>false</required>
+    <type>LongTextArea</type>
+    <visibleLines>4</visibleLines>
+</CustomField>

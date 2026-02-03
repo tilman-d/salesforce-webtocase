@@ -66,3 +66,21 @@
 .slds-accordion__content {
     overflow: visible !important;
 }
+
+/* Embed code styles */
+.embed-code-box {
+    background-color: #1e1e1e;
+    border-radius: 0.25rem;
+    overflow-x: auto;
+}
+
+.embed-code {
+    font-family: 'SF Mono', Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+    font-size: 0.75rem;
+    line-height: 1.5;
+    color: #d4d4d4;
+    margin: 0;
+    padding: 0.5rem;
+    white-space: pre-wrap;
+    word-break: break-word;
+}

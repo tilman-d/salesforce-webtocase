@@ -8,6 +8,13 @@
         <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
         <title>{!IF(form != null, form.Title__c, 'Form')}</title>
         <apex:stylesheet value="{!$Resource.caseFormStyles}"/>
+        <!-- Embed mode: minimal padding -->
+        <apex:outputPanel rendered="{!isEmbedMode}">
+            <style>
+                body { padding: 0; background: transparent; }
+                .form-container { box-shadow: none; padding: 16px; }
+            </style>
+        </apex:outputPanel>
         <!-- Google reCAPTCHA Script - v2 types use standard script -->
         <apex:outputPanel rendered="{!AND(captchaEnabled, captchaType != 'V3_Score')}">
             <script src="https://www.google.com/recaptcha/api.js" async="true" defer="true"></script>
@@ -138,7 +145,8 @@
                     captchaType: '{!JSENCODE(captchaType)}',
                     captchaSiteKey: '{!JSENCODE(captchaSiteKey)}',
                     remoteAction: '{!$RemoteAction.CaseFormController.submitForm}',
-                    uploadChunkAction: '{!$RemoteAction.CaseFormController.uploadFileChunk}'
+                    uploadChunkAction: '{!$RemoteAction.CaseFormController.uploadFileChunk}',
+                    isEmbedMode: {!isEmbedMode}
                 };
             </script>
             <!-- Image compression library for large file handling -->

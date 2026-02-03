@@ -18,6 +18,7 @@ public with sharing class FormAdminController {
         @AuraEnabled public String successMessage;
         @AuraEnabled public Boolean enableCaptcha;
         @AuraEnabled public String siteId;
+        @AuraEnabled public String allowedDomains;
         @AuraEnabled public String publicUrl;
         @AuraEnabled public Integer fieldCount;
         @AuraEnabled public List<FieldWrapper> fields;
@@ -43,6 +44,7 @@ public with sharing class FormAdminController {
             this.successMessage = form.Success_Message__c;
             this.enableCaptcha = form.Enable_Captcha__c;
             this.siteId = form.Site_Id__c;
+            this.allowedDomains = form.Allowed_Domains__c;
             this.fieldCount = fieldCount;
             this.fields = new List<FieldWrapper>();
             this.createdDate = form.CreatedDate;
@@ -155,7 +157,7 @@ public with sharing class FormAdminController {
         List<Form__c> forms = [
             SELECT Id, Form_Name__c, Title__c, Description__c, Active__c,
                    Enable_File_Upload__c, Max_File_Size_MB__c, Success_Message__c, Enable_Captcha__c,
-                   Site_Id__c, CreatedDate
+                   Site_Id__c, Allowed_Domains__c, CreatedDate
             FROM Form__c
             ORDER BY CreatedDate DESC
         ];
@@ -204,7 +206,7 @@ public with sharing class FormAdminController {
         List<Form__c> forms = [
             SELECT Id, Form_Name__c, Title__c, Description__c, Active__c,
                    Enable_File_Upload__c, Max_File_Size_MB__c, Success_Message__c, Enable_Captcha__c,
-                   Site_Id__c, CreatedDate
+                   Site_Id__c, Allowed_Domains__c, CreatedDate
             FROM Form__c
             WHERE Id = :formId
             LIMIT 1
@@ -263,6 +265,7 @@ public with sharing class FormAdminController {
         String successMessage = (String)formData.get('successMessage');
         Boolean enableCaptcha = (Boolean)formData.get('enableCaptcha');
         String siteId = (String)formData.get('siteId');
+        String allowedDomains = (String)formData.get('allowedDomains');
 
         // Validate required fields
         if (String.isBlank(formName)) {
@@ -300,6 +303,7 @@ public with sharing class FormAdminController {
         form.Success_Message__c = successMessage;
         form.Enable_Captcha__c = enableCaptcha == true;
         form.Site_Id__c = String.isNotBlank(siteId) ? siteId : null;
+        form.Allowed_Domains__c = allowedDomains;
 
         try {
             upsert form;

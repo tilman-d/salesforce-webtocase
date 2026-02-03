@@ -36,6 +36,7 @@ export default class FormDetail extends LightningElement {
         successMessage: '',
         enableCaptcha: false,
         siteId: null,
+        allowedDomains: '',
         publicUrl: null
     };
 
@@ -113,6 +114,7 @@ export default class FormDetail extends LightningElement {
                         successMessage: result.successMessage || '',
                         enableCaptcha: result.enableCaptcha || false,
                         siteId: result.siteId || null,
+                        allowedDomains: result.allowedDomains || '',
                         publicUrl: result.publicUrl || null
                     };
                     this.fields = (result.fields || []).map((f, index) => ({
@@ -141,6 +143,7 @@ export default class FormDetail extends LightningElement {
                 successMessage: '',
                 enableCaptcha: false,
                 siteId: null,
+                allowedDomains: '',
                 publicUrl: null
             };
             this.fields = [];
@@ -286,6 +289,114 @@ export default class FormDetail extends LightningElement {
                 this.showToast('Error', 'Could not copy URL to clipboard', 'error');
             });
         }
+    }
+
+    handleAllowedDomainsChange(event) {
+        this.form.allowedDomains = event.target.value;
+        this.hasUnsavedChanges = true;
+    }
+
+    get hasAllowedDomains() {
+        return this.form.allowedDomains && this.form.allowedDomains.trim().length > 0;
+    }
+
+    get embedApiBase() {
+        const baseUrl = this.resolvedBaseUrl;
+        if (!baseUrl) return '';
+        // Remove trailing slash and add services/apexrest path
+        let url = baseUrl;
+        if (url.endsWith('/')) {
+            url = url.slice(0, -1);
+        }
+        return url + '/services/apexrest';
+    }
+
+    get embedWidgetUrl() {
+        const baseUrl = this.resolvedBaseUrl;
+        if (!baseUrl) return '';
+        let url = baseUrl;
+        if (!url.endsWith('/')) {
+            url += '/';
+        }
+        return url + 'resource/caseFormWidget';
+    }
+
+    get embedScriptSnippet() {
+        const widgetUrl = this.embedWidgetUrl;
+        const apiBase = this.embedApiBase;
+        if (!widgetUrl || !apiBase) {
+            return '<!-- Configure a Site in Settings to generate embed code -->';
+        }
+        const formName = this.form.formName || 'your-form-name';
+        return `<div id="support-form"></div>
+<script src="${widgetUrl}"></script>
+<script>
+  WebToCaseForm.render({
+    formName: '${formName}',
+    containerId: 'support-form',
+    apiBase: '${apiBase}',
+    onSuccess: function(caseNumber) {
+      console.log('Case created:', caseNumber);
+    },
+    onError: function(error) {
+      console.error('Error:', error);
+    }
+  });
+</script>`;
+    }
+
+    get embedStyleSnippet() {
+        return `<style>
+  #support-form {
+    --wtc-primary-color: #0176d3;
+    --wtc-font-family: system-ui, -apple-system, sans-serif;
+    --wtc-border-radius: 4px;
+    --wtc-input-border: 1px solid #c9c9c9;
+    --wtc-input-background: #ffffff;
+    --wtc-text-color: #181818;
+    --wtc-error-color: #c23934;
+    --wtc-success-color: #2e844a;
+  }
+</style>`;
+    }
+
+    get embedIframeSnippet() {
+        const publicUrl = this.computedPublicUrl;
+        if (!publicUrl) {
+            return '<!-- Configure a Site in Settings to generate embed code -->';
+        }
+        return `<iframe
+  src="${publicUrl}&embed=1"
+  style="width:100%; border:none; min-height:500px;"
+  id="wtc-frame">
+</iframe>
+<script>
+  window.addEventListener('message', function(e) {
+    if (e.data && e.data.type === 'wtc:resize') {
+      document.getElementById('wtc-frame').style.height = e.data.height + 'px';
+    }
+  });
+</script>`;
+    }
+
+    handleCopyScriptCode() {
+        this.copyToClipboard(this.embedScriptSnippet, 'Embed code copied to clipboard');
+    }
+
+    handleCopyStyleCode() {
+        this.copyToClipboard(this.embedStyleSnippet, 'Style code copied to clipboard');
+    }
+
+    handleCopyIframeCode() {
+        this.copyToClipboard(this.embedIframeSnippet, 'iframe code copied to clipboard');
+    }
+
+    copyToClipboard(text, successMessage) {
+        navigator.clipboard.writeText(text).then(() => {
+            this.showToast('Success', successMessage, 'success');
+        }).catch(() => {
+            this.showToast('Error', 'Could not copy to clipboard', 'error');
+        });
     }
 
     handleSuccessMessageChange(event) {
@@ -469,7 +580,8 @@ export default class FormDetail extends LightningElement {
                 maxFileSizeMB: this.form.maxFileSizeMB,
                 successMessage: this.form.successMessage,
                 enableCaptcha: this.form.enableCaptcha,
-                siteId: this.form.siteId
+                siteId: this.form.siteId,
+                allowedDomains: this.form.allowedDomains
             };
 
             const formId = await saveForm({ formData: formData });

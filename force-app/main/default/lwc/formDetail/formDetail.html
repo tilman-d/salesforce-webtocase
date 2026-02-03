@@ -323,6 +323,108 @@
                         </div>
                     </template>
                 </lightning-accordion-section>
+
+                <!-- Embed Code Section -->
+                <lightning-accordion-section name="embed" label="Embed Code">
+                    <template if:true={isNewForm}>
+                        <div class="slds-illustration slds-illustration_small slds-p-around_medium slds-text-align_center">
+                            <p class="slds-text-body_regular">Save the form first to generate embed code.</p>
+                        </div>
+                    </template>
+
+                    <template if:false={isNewForm}>
+                        <div class="slds-grid slds-wrap slds-gutters">
+                            <!-- Allowed Domains -->
+                            <div class="slds-col slds-size_1-of-1 slds-p-bottom_medium">
+                                <lightning-textarea
+                                    label="Allowed Domains (one per line)"
+                                    value={form.allowedDomains}
+                                    onchange={handleAllowedDomainsChange}
+                                    placeholder="example.com&#10;mysite.org"
+                                    field-level-help="Enter domain names that are allowed to embed this form. Leave empty to disable external embedding.">
+                                </lightning-textarea>
+                                <p class="slds-text-color_weak slds-text-body_small slds-m-top_x-small">
+                                    Enter only the domain (e.g., example.com), not the full URL. One domain per line.
+                                </p>
+                            </div>
+
+                            <template if:true={hasAllowedDomains}>
+                                <!-- Inline Widget Code -->
+                                <div class="slds-col slds-size_1-of-1 slds-p-bottom_medium">
+                                    <div class="slds-text-title_bold slds-m-bottom_x-small">1. Add this script to your website:</div>
+                                    <div class="slds-box slds-box_x-small slds-theme_shade embed-code-box">
+                                        <pre class="embed-code">{embedScriptSnippet}</pre>
+                                    </div>
+                                    <div class="slds-m-top_x-small">
+                                        <lightning-button
+                                            label="Copy Code"
+                                            icon-name="utility:copy"
+                                            onclick={handleCopyScriptCode}>
+                                        </lightning-button>
+                                    </div>
+                                </div>
+
+                                <!-- Styling Code -->
+                                <div class="slds-col slds-size_1-of-1 slds-p-bottom_medium">
+                                    <div class="slds-text-title_bold slds-m-bottom_x-small">2. (Optional) Customize styling:</div>
+                                    <div class="slds-box slds-box_x-small slds-theme_shade embed-code-box">
+                                        <pre class="embed-code">{embedStyleSnippet}</pre>
+                                    </div>
+                                    <div class="slds-m-top_x-small">
+                                        <lightning-button
+                                            label="Copy Code"
+                                            icon-name="utility:copy"
+                                            onclick={handleCopyStyleCode}>
+                                        </lightning-button>
+                                    </div>
+                                </div>
+
+                                <!-- iframe Alternative -->
+                                <div class="slds-col slds-size_1-of-1 slds-p-bottom_medium">
+                                    <div class="slds-text-title_bold slds-m-bottom_x-small">Alternative: iframe Embed</div>
+                                    <p class="slds-text-body_small slds-text-color_weak slds-m-bottom_x-small">
+                                        Use iframe if you need full DOM isolation or have CSP restrictions.
+                                    </p>
+                                    <div class="slds-box slds-box_x-small slds-theme_shade embed-code-box">
+                                        <pre class="embed-code">{embedIframeSnippet}</pre>
+                                    </div>
+                                    <div class="slds-m-top_x-small">
+                                        <lightning-button
+                                            label="Copy Code"
+                                            icon-name="utility:copy"
+                                            onclick={handleCopyIframeCode}>
+                                        </lightning-button>
+                                    </div>
+                                </div>
+
+                                <!-- reCAPTCHA Warning -->
+                                <template if:true={form.enableCaptcha}>
+                                    <div class="slds-col slds-size_1-of-1">
+                                        <div class="slds-scoped-notification slds-media slds-media_center slds-theme_warning" role="status">
+                                            <div class="slds-media__figure">
+                                                <lightning-icon icon-name="utility:warning" size="small"></lightning-icon>
+                                            </div>
+                                            <div class="slds-media__body">
+                                                <p>
+                                                    <strong>reCAPTCHA Setup Required:</strong> Add your embedding domain to your
+                                                    <a href="https://www.google.com/recaptcha/admin" target="_blank" rel="noopener">Google reCAPTCHA allowed domains list</a>.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </template>
+                            </template>
+
+                            <template if:false={hasAllowedDomains}>
+                                <div class="slds-col slds-size_1-of-1">
+                                    <div class="slds-illustration slds-illustration_small slds-p-around_medium slds-text-align_center">
+                                        <p class="slds-text-body_regular">Add allowed domains above to enable external embedding and view embed code.</p>
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+                </lightning-accordion-section>
             </lightning-accordion>
         </div>
     </template>

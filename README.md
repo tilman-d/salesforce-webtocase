@@ -21,9 +21,9 @@ The following reCAPTCHA items need manual verification before release:
 
 | | |
 |---|---|
-| **Version** | v0.4.8 |
-| **Phases Complete** | 0-3 (MVP, Admin UI, Setup Wizard, reCAPTCHA) |
-| **Next Up** | Phase 4 (Embeddable widget, multi-file upload) |
+| **Version** | v0.5.0 |
+| **Phases Complete** | 0-4 (MVP, Admin UI, Setup Wizard, reCAPTCHA, Embeddable Widget) |
+| **Next Up** | Phase 5 (Multi-file upload, custom field types) |
 | **Dev Org** | `devorg` (tilman.dietrich@gmail.com.dev) |
 | **GitHub** | https://github.com/tilman-d/salesforce-webtocase |
 | **Last Change** | Allow changing reCAPTCHA type without re-entering secret key |
@@ -50,7 +50,8 @@ Salesforce's native Web-to-Case doesn't support file attachments. This app solve
 | **Phase 1** | Admin UI (LWC form builder) | ✅ Complete |
 | **Phase 2** | Post-Install Setup Wizard | ✅ Complete |
 | **Phase 3** | reCAPTCHA integration | ✅ Complete |
-| **Phase 4** | Embeddable widget, multi-file upload | 🔜 **Next up** |
+| **Phase 4** | Embeddable widget for external websites | ✅ Complete |
+| **Phase 5** | Multi-file upload, custom field types | 🔜 **Next up** |
 
 ---
 
@@ -190,6 +191,158 @@ Protects public forms from spam and bot submissions with "I'm not a robot" check
 ### Test Coverage
 - **CaseFormControllerTest** - 22 tests including 9 CAPTCHA-specific tests with HTTP mocks
 - 88% code coverage on CaseFormController
+
+---
+
+## What's Built (Phase 4)
+
+### Embeddable Widget for External Websites
+Allows users to embed Web-to-Case forms on external websites using a `<script>` tag.
+
+**Two Embed Modes:**
+
+#### Mode 1: Inline Widget (Recommended)
+- Uses Shadow DOM for CSS isolation
+- Customizable via CSS variables
+- Form rendered directly in the host page
+
+#### Mode 2: iframe Embed
+- Full DOM isolation
+- Automatic height resizing via postMessage
+- Best for sites with strict CSP policies
+
+### REST API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/webtocase/v1/form/{formName}` | Get form configuration + nonce |
+| POST | `/webtocase/v1/submit` | Submit form data |
+| POST | `/webtocase/v1/upload-chunk` | Upload file chunk |
+| OPTIONS | `/*` | CORS preflight |
+
+### Security Features
+- **Origin validation**: Strict domain allowlist per form
+- **One-time nonce**: Prevents replay attacks (15-min TTL)
+- **Rate limiting**: 100 submissions/hour per origin
+- **Field allowlist**: Server ignores unknown fields
+
+### New Files
+
+**Apex Classes:**
+- `WebToCaseRestAPI.cls` - REST API with CORS support
+- `WebToCaseNonceService.cls` - Nonce generation/validation
+- `WebToCaseRateLimiter.cls` - Rate limiting logic
+- `WebToCaseRestAPITest.cls` - Unit tests
+
+**Static Resources:**
+- `caseFormWidget.js` - Embeddable widget script
+
+**Custom Objects:**
+- `Rate_Limit_Counter__c` - Tracks rate limits per origin
+
+**New Fields:**
+- `Form__c.Allowed_Domains__c` - Newline-separated domain allowlist
+
+### Admin UI Updates
+- **Embed Code section** in Form Detail with:
+  - Allowed Domains textarea
+  - Auto-generated embed code snippets
+  - Copy buttons for code
+  - reCAPTCHA domain warning
+
+### CSS Variables for Styling
+
+```css
+#support-form {
+  --wtc-primary-color: #0176d3;
+  --wtc-font-family: system-ui, sans-serif;
+  --wtc-border-radius: 4px;
+  --wtc-input-border: 1px solid #c9c9c9;
+  --wtc-input-background: #ffffff;
+  --wtc-text-color: #181818;
+  --wtc-error-color: #c23934;
+  --wtc-success-color: #2e844a;
+}
+```
+
+---
+
+## Embedding Forms on External Websites
+
+### Quick Start
+
+1. **Configure allowed domains** in Form Manager:
+   - Edit your form
+   - Go to "Embed Code" section
+   - Add your website domain (e.g., `example.com`)
+   - Save the form
+
+2. **Add embed code to your website**:
+
+```html
+<div id="support-form"></div>
+<script src="https://yoursite.salesforce-sites.com/support/resource/caseFormWidget"></script>
+<script>
+  WebToCaseForm.render({
+    formName: 'support',
+    containerId: 'support-form',
+    apiBase: 'https://yoursite.salesforce-sites.com/support/services/apexrest',
+    onSuccess: function(caseNumber) {
+      console.log('Case created:', caseNumber);
+    },
+    onError: function(error) {
+      console.error('Error:', error);
+    }
+  });
+</script>
+```
+
+### iframe Alternative
+
+Use iframe if you need full DOM isolation:
+
+```html
+<iframe
+  src="https://yoursite.salesforce-sites.com/support/apex/CaseFormPage?form=support&embed=1"
+  style="width:100%; border:none; min-height:500px;"
+  id="wtc-frame">
+</iframe>
+<script>
+  window.addEventListener('message', function(e) {
+    if (e.data && e.data.type === 'wtc:resize') {
+      document.getElementById('wtc-frame').style.height = e.data.height + 'px';
+    }
+  });
+</script>
+```
+
+### CSP Requirements
+
+Add these to your Content-Security-Policy if using the inline widget:
+
+```
+script-src: https://yoursite.salesforce-sites.com
+connect-src: https://yoursite.salesforce-sites.com
+frame-src: https://www.google.com https://yoursite.salesforce-sites.com
+```
+
+### reCAPTCHA Setup for Embedded Forms
+
+If your form uses CAPTCHA, add your embedding domain to Google reCAPTCHA:
+
+1. Go to [Google reCAPTCHA Admin Console](https://www.google.com/recaptcha/admin)
+2. Select your reCAPTCHA site
+3. Add your embedding domain (e.g., `example.com`) to the allowed domains list
+
+### Troubleshooting Embedded Forms
+
+| Issue | Solution |
+|-------|----------|
+| "Origin not allowed" error | Add your domain to Allowed Domains in Form Manager |
+| CORS errors | Verify the apiBase URL is correct |
+| CAPTCHA not loading | Add your domain to Google reCAPTCHA allowed domains |
+| Form not rendering | Check browser console for JavaScript errors |
+| Rate limit exceeded | Wait 1 hour or contact the form administrator |
 
 ---
 
@@ -373,11 +526,11 @@ Access: `https://[your-domain].my.salesforce-sites.com/support/CaseFormPage?name
 
 ## Roadmap
 
-### Phase 4: Advanced Features (NEXT)
-- Embeddable JavaScript widget (for non-Salesforce sites)
-- Multi-file upload
-- Custom field types (picklist, date)
+### Phase 5: Advanced Features (NEXT)
+- Multi-file upload (drag & drop)
+- Custom field types (picklist, date, checkbox)
 - Form analytics/submission tracking
+- Email notifications on submission
 
 ---
 
@@ -391,9 +544,11 @@ force-app/main/default/
 │   ├── Form__c/                         # Form configuration
 │   │   └── fields/
 │   │       ├── Enable_Captcha__c        # Phase 3
-│   │       └── Site_Id__c               # URL Display Feature
+│   │       ├── Site_Id__c               # URL Display Feature
+│   │       └── Allowed_Domains__c       # Phase 4 - Embed allowlist
 │   ├── Form_Field__c/                   # Field definitions
 │   ├── Error_Log__c/                    # Error logging
+│   ├── Rate_Limit_Counter__c/           # Phase 4 - Rate limiting
 │   └── reCAPTCHA_Settings__c/           # Phase 3 - API keys + Site settings
 │       └── fields/
 │           ├── Site_Key__c
@@ -410,7 +565,11 @@ force-app/main/default/
 │   ├── FormAdminController.cls          # Phase 1
 │   ├── FormAdminControllerTest.cls      # Phase 1
 │   ├── SetupWizardController.cls        # Phase 2
-│   └── SetupWizardControllerTest.cls    # Phase 2
+│   ├── SetupWizardControllerTest.cls    # Phase 2
+│   ├── WebToCaseRestAPI.cls             # Phase 4 - REST endpoints
+│   ├── WebToCaseNonceService.cls        # Phase 4 - Nonce management
+│   ├── WebToCaseRateLimiter.cls         # Phase 4 - Rate limiting
+│   └── WebToCaseRestAPITest.cls         # Phase 4 - Tests
 ├── lwc/
 │   ├── formAdminApp/                    # Phase 1 - Main admin container
 │   ├── formDetail/                      # Phase 1 - Form editor (+ CAPTCHA toggle)
@@ -425,7 +584,8 @@ force-app/main/default/
 │   └── CaseFormPage.page                # + reCAPTCHA widget (Phase 3)
 ├── staticresources/
 │   ├── caseFormStyles.css               # + CAPTCHA styles (Phase 3)
-│   ├── caseFormScript.js                # + compression & validation
+│   ├── caseFormScript.js                # + compression, validation, postMessage
+│   ├── caseFormWidget.js                # Phase 4 - Embeddable widget
 │   └── imageCompression.js              # browser-image-compression library
 ├── remoteSiteSettings/
 │   └── Google_reCAPTCHA.remoteSite-meta.xml  # Phase 3
@@ -469,6 +629,27 @@ force-app/main/default/
 ---
 
 ## Changelog
+
+### v0.5.0 (2026-02-03) - Phase 4: Embeddable Widget
+- **Embeddable widget** for external websites with Shadow DOM isolation
+- **Two embed modes**: Inline widget (recommended) and iframe embed
+- **REST API** for cross-origin form operations (`/webtocase/v1/*`)
+- **Security features**:
+  - Origin validation with per-form domain allowlist
+  - One-time nonces (15-min TTL) prevent replay attacks
+  - Rate limiting (100 submissions/hour per origin)
+  - Server-side field allowlist enforcement
+- **CSS variable theming** for widget customization
+- **postMessage API** for iframe height auto-resize
+- **New Apex classes**:
+  - `WebToCaseRestAPI` - REST endpoints with CORS support
+  - `WebToCaseNonceService` - Nonce generation/validation
+  - `WebToCaseRateLimiter` - Rate limiting logic
+- **New static resource**: `caseFormWidget.js` - Embeddable widget script
+- **New custom object**: `Rate_Limit_Counter__c` for rate limit tracking
+- **New field**: `Form__c.Allowed_Domains__c` - Domain allowlist
+- **Admin UI**: Embed Code section with code snippets and copy buttons
+- **Test coverage**: WebToCaseRestAPITest with nonce, rate limit, and origin validation tests
 
 ### v0.4.8 (2026-02-02) - reCAPTCHA Type Change UX Fix
 - **Fixed:** Users can now change reCAPTCHA type (v2 Checkbox, v2 Invisible, v3 Score) without re-entering the secret key
@@ -615,11 +796,14 @@ See the **🧪 MANUAL TESTING REQUIRED** section at the top of this README for t
 
 ## Next Session Starting Point
 
-**Status:** Phases 0-3 complete and polished. Ready for Phase 4.
+**Status:** Phases 0-4 complete. Ready for Phase 5 (multi-file upload, custom field types).
 
-**Recent changes (v0.4.8):**
-- reCAPTCHA type can now be changed without re-entering secret key (when already configured)
-- Frontend validation updated to match backend's partial update support
+**Recent changes (v0.5.0):**
+- Embeddable widget for external websites with Shadow DOM isolation
+- REST API (`/webtocase/v1/*`) with CORS support
+- Security: Origin validation, one-time nonces, rate limiting
+- Admin UI: Embed Code section with code snippets and domain allowlist
+- 175 Apex tests passing, 11 Playwright tests passing
 
 **File size limits (fixed):**
 | File Type | Limit | Behavior |
@@ -647,12 +831,7 @@ sf project deploy start --target-org devorg
 
 ---
 
-### Phase 4 Implementation Ideas
-
-**Embeddable JavaScript Widget:**
-- Generate embeddable `<script>` tag for external websites
-- Cross-domain form submission via postMessage or CORS
-- Customizable styling via CSS variables
+### Phase 5 Implementation Ideas
 
 **Multi-file Upload:**
 - Allow multiple file attachments per submission
@@ -676,19 +855,20 @@ sf project deploy start --target-org devorg
 
 When creating the managed/unlocked package for AppExchange, include the following metadata components:
 
-### Custom Objects (3)
+### Custom Objects (4)
 | Component | API Name | Description |
 |-----------|----------|-------------|
 | Custom Object | `Form__c` | Form configuration |
 | Custom Object | `Form_Field__c` | Form field definitions |
 | Custom Object | `Error_Log__c` | Error logging |
+| Custom Object | `Rate_Limit_Counter__c` | Rate limit tracking (Phase 4) |
 
 ### Custom Settings (1)
 | Component | API Name | Description |
 |-----------|----------|-------------|
 | Custom Setting (Hierarchy) | `reCAPTCHA_Settings__c` | reCAPTCHA API keys and settings (Protected) |
 
-### Custom Fields - Form__c (9)
+### Custom Fields - Form__c (10)
 | Field | API Name |
 |-------|----------|
 | Form Name | `Form_Name__c` |
@@ -700,6 +880,7 @@ When creating the managed/unlocked package for AppExchange, include the followin
 | Max File Size MB | `Max_File_Size_MB__c` |
 | Enable Captcha | `Enable_Captcha__c` |
 | Site Id | `Site_Id__c` |
+| Allowed Domains | `Allowed_Domains__c` (Phase 4) |
 
 ### Custom Fields - Form_Field__c (6)
 | Field | API Name |
@@ -729,7 +910,15 @@ When creating the managed/unlocked package for AppExchange, include the followin
 | Default Site Id | `Default_Site_Id__c` |
 | Default Site Base Url | `Default_Site_Base_Url__c` |
 
-### Apex Classes (8)
+### Custom Fields - Rate_Limit_Counter__c (4) - Phase 4
+| Field | API Name |
+|-------|----------|
+| Origin Key | `Origin_Key__c` |
+| Origin Domain | `Origin_Domain__c` |
+| Count | `Count__c` |
+| Hour Bucket | `Hour_Bucket__c` |
+
+### Apex Classes (12)
 | Class | Description |
 |-------|-------------|
 | `CaseFormController` | Public form controller |
@@ -740,6 +929,10 @@ When creating the managed/unlocked package for AppExchange, include the followin
 | `FormAdminControllerTest` | Test class |
 | `SetupWizardController` | Setup Wizard controller |
 | `SetupWizardControllerTest` | Test class |
+| `WebToCaseRestAPI` | REST API for embed widget (Phase 4) |
+| `WebToCaseNonceService` | Nonce management for security (Phase 4) |
+| `WebToCaseRateLimiter` | Rate limiting logic (Phase 4) |
+| `WebToCaseRestAPITest` | Test class (Phase 4) |
 
 ### Lightning Web Components (3)
 | Component | Description |
@@ -753,12 +946,13 @@ When creating the managed/unlocked package for AppExchange, include the followin
 |------|-------------|
 | `CaseFormPage` | Public form page |
 
-### Static Resources (3)
+### Static Resources (4)
 | Resource | Description |
 |----------|-------------|
 | `caseFormStyles` | Form CSS styling |
 | `caseFormScript` | Form JavaScript (validation, compression, submission) |
 | `imageCompression` | browser-image-compression library for client-side image optimization |
+| `caseFormWidget` | Embeddable widget script for external websites (Phase 4) |
 
 ### Lightning App (1)
 | App | API Name |
@@ -796,6 +990,7 @@ When creating the managed/unlocked package for AppExchange, include the followin
         <members>Form__c</members>
         <members>Form_Field__c</members>
         <members>Error_Log__c</members>
+        <members>Rate_Limit_Counter__c</members>
         <name>CustomObject</name>
     </types>
     <types>
@@ -811,6 +1006,10 @@ When creating the managed/unlocked package for AppExchange, include the followin
         <members>FormAdminControllerTest</members>
         <members>SetupWizardController</members>
         <members>SetupWizardControllerTest</members>
+        <members>WebToCaseRestAPI</members>
+        <members>WebToCaseNonceService</members>
+        <members>WebToCaseRateLimiter</members>
+        <members>WebToCaseRestAPITest</members>
         <name>ApexClass</name>
     </types>
     <types>
@@ -827,6 +1026,7 @@ When creating the managed/unlocked package for AppExchange, include the followin
         <members>caseFormStyles</members>
         <members>caseFormScript</members>
         <members>imageCompression</members>
+        <members>caseFormWidget</members>
         <name>StaticResource</name>
     </types>
     <types>

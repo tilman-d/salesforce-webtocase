@@ -157,6 +157,24 @@
         });
     }
 
+    // postMessage helpers for embed mode
+    function postMessageToParent(type, data) {
+        if (formConfig && formConfig.isEmbedMode && window.parent !== window) {
+            window.parent.postMessage({
+                type: 'wtc:' + type,
+                version: 1,
+                ...data
+            }, '*'); // Note: In production, use specific origin
+        }
+    }
+
+    function notifyResize() {
+        if (formConfig && formConfig.isEmbedMode) {
+            var height = document.body.scrollHeight;
+            postMessageToParent('resize', { height: height });
+        }
+    }
+
     // Wait for DOM to be ready
     document.addEventListener('DOMContentLoaded', init);
 
@@ -176,6 +194,15 @@
         console.log('CaseForm: Initializing with formId:', formConfig.formId);
         if (formConfig.enableCaptcha) {
             console.log('CaseForm: reCAPTCHA is enabled, type:', formConfig.captchaType);
+        }
+
+        // Notify parent in embed mode
+        if (formConfig.isEmbedMode) {
+            postMessageToParent('ready', {});
+            // Notify resize after a short delay to let styles settle
+            setTimeout(notifyResize, 100);
+            // Also notify on window resize
+            window.addEventListener('resize', notifyResize);
         }
 
         // Attach submit handler
@@ -696,6 +723,10 @@
             // Scroll to error
             errorDiv.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
+
+        // Notify parent in embed mode
+        postMessageToParent('error', { error: message });
+        setTimeout(notifyResize, 100);
     }
 
     /**
@@ -730,6 +761,10 @@
         }
 
         hideError();
+
+        // Notify parent in embed mode
+        postMessageToParent('success', { caseNumber: caseNumber });
+        setTimeout(notifyResize, 100);
     }
 
     /**

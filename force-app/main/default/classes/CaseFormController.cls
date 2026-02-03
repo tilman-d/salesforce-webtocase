@@ -17,6 +17,9 @@ global without sharing class CaseFormController {
     // Preview mode (bypasses Active check for admin testing)
     public Boolean isPreviewMode { get; set; }
 
+    // Embed mode (for iframe embedding on external sites)
+    public Boolean isEmbedMode { get; set; }
+
     // Chunk size for file uploads (750KB raw = ~1MB Base64, safely under VF Remoting limits)
     private static final Integer CHUNK_SIZE = 750000;
 
@@ -31,6 +34,8 @@ global without sharing class CaseFormController {
         }
         // Check for preview mode
         isPreviewMode = ApexPages.currentPage().getParameters().get('preview') == 'true';
+        // Check for embed mode
+        isEmbedMode = ApexPages.currentPage().getParameters().get('embed') == '1';
         loadForm();
     }
 
