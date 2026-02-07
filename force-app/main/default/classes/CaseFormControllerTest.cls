@@ -604,6 +604,290 @@ private class CaseFormControllerTest {
     }
 
     /**
+     * Test async path is triggered when totalChunks > 3
+     * The Queueable should be enqueued and response should have processing: true
+     */
+    @isTest
+    static void testUploadFileChunkAsyncPath() {
+        // Create a Case first
+        Case testCase = new Case(Subject = 'Test Async Path', Status = 'New');
+        insert testCase;
+
+        String fileName = 'large-document.pdf';
+        String uploadKey = 'test-async-upload-key';
+
+        // Upload 4 chunks (first 3 are not the last chunk)
+        for (Integer i = 0; i < 3; i++) {
+            String chunkData = EncodingUtil.base64Encode(Blob.valueOf('Chunk' + i + 'Data-'));
+            Map<String, Object> chunkResult = CaseFormController.uploadFileChunk(
+                testCase.Id, fileName, chunkData, i, 4, uploadKey
+            );
+            System.assertEquals(true, chunkResult.get('success'), 'Chunk ' + i + ' should succeed');
+            System.assertEquals(false, chunkResult.get('complete'), 'Should not be complete yet');
+        }
+
+        // Upload the 4th (last) chunk - should trigger async path
+        Test.startTest();
+        String lastChunkData = EncodingUtil.base64Encode(Blob.valueOf('Chunk3Data'));
+        Map<String, Object> result = CaseFormController.uploadFileChunk(
+            testCase.Id, fileName, lastChunkData, 3, 4, uploadKey
+        );
+        Test.stopTest(); // Executes the Queueable synchronously
+
+        System.assertEquals(true, result.get('success'), 'Last chunk should succeed');
+        System.assertEquals(true, result.get('processing'), 'Should indicate async processing');
+        System.assertEquals(uploadKey, result.get('uploadKey'), 'Should return uploadKey for polling');
+
+        // After Test.stopTest(), the Queueable has executed
+        // Verify the final file was created
+        List<ContentDocumentLink> cdls = [
+            SELECT ContentDocumentId FROM ContentDocumentLink WHERE LinkedEntityId = :testCase.Id
+        ];
+        Set<Id> docIds = new Set<Id>();
+        for (ContentDocumentLink cdl : cdls) {
+            docIds.add(cdl.ContentDocumentId);
+        }
+        List<ContentVersion> finalFiles = [
+            SELECT Title, VersionData FROM ContentVersion
+            WHERE ContentDocumentId IN :docIds AND Title = :fileName AND IsLatest = true
+        ];
+        System.assertEquals(1, finalFiles.size(), 'Final file should be created by Queueable');
+        System.assertEquals(fileName, finalFiles[0].Title, 'File name should match');
+    }
+
+    /**
+     * Test server-side file size validation rejects files exceeding 4MB
+     */
+    @isTest
+    static void testServerSideFileSizeValidation() {
+        Case testCase = new Case(Subject = 'Test Size Validation', Status = 'New');
+        insert testCase;
+
+        String fileName = 'too-large.pdf';
+        String uploadKey = 'test-size-key';
+
+        // Simulate a file that would be 7 chunks (7 * 750KB = 5.25MB, exceeds 4MB)
+        // Upload first 6 chunks
+        for (Integer i = 0; i < 6; i++) {
+            String chunkData = EncodingUtil.base64Encode(Blob.valueOf('X'.repeat(100)));
+            CaseFormController.uploadFileChunk(testCase.Id, fileName, chunkData, i, 7, uploadKey);
+        }
+
+        Test.startTest();
+        // Upload the 7th (last) chunk - should be rejected by size validation
+        String lastChunkData = EncodingUtil.base64Encode(Blob.valueOf('X'.repeat(100)));
+        Map<String, Object> result = CaseFormController.uploadFileChunk(
+            testCase.Id, fileName, lastChunkData, 6, 7, uploadKey
+        );
+        Test.stopTest();
+
+        System.assertEquals(false, result.get('success'), 'Should fail due to size limit');
+        System.assert(((String)result.get('error')).contains('4MB'), 'Error should mention 4MB limit');
+    }
+
+    /**
+     * Test checkUploadStatus returns 'complete' when final file exists
+     */
+    @isTest
+    static void testCheckUploadStatusComplete() {
+        Case testCase = new Case(Subject = 'Test Status Complete', Status = 'New');
+        insert testCase;
+
+        // Create a final file on the Case
+        ContentVersion cv = new ContentVersion();
+        cv.Title = 'completed-file.pdf';
+        cv.PathOnClient = 'completed-file.pdf';
+        cv.VersionData = Blob.valueOf('Test content');
+        insert cv;
+
+        ContentVersion insertedCv = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id];
+        ContentDocumentLink cdl = new ContentDocumentLink();
+        cdl.ContentDocumentId = insertedCv.ContentDocumentId;
+        cdl.LinkedEntityId = testCase.Id;
+        cdl.ShareType = 'V';
+        cdl.Visibility = 'AllUsers';
+        insert cdl;
+
+        Test.startTest();
+        Map<String, Object> result = CaseFormController.checkUploadStatus(
+            testCase.Id, 'any-upload-key', 'completed-file.pdf'
+        );
+        Test.stopTest();
+
+        System.assertEquals('complete', result.get('status'), 'Status should be complete');
+    }
+
+    /**
+     * Test checkUploadStatus returns 'processing' when chunks still exist
+     */
+    @isTest
+    static void testCheckUploadStatusProcessing() {
+        Case testCase = new Case(Subject = 'Test Status Processing', Status = 'New');
+        insert testCase;
+
+        String uploadKey = 'processing-test-key';
+
+        // Create a chunk file on the Case (simulating in-progress assembly)
+        String chunkTitle = '__chunk__' + uploadKey + '__0__4__test-file.pdf';
+        ContentVersion cv = new ContentVersion();
+        cv.Title = chunkTitle;
+        cv.PathOnClient = chunkTitle + '.tmp';
+        cv.VersionData = Blob.valueOf('chunk data');
+        cv.FirstPublishLocationId = testCase.Id;
+        insert cv;
+
+        Test.startTest();
+        Map<String, Object> result = CaseFormController.checkUploadStatus(
+            testCase.Id, uploadKey, 'test-file.pdf'
+        );
+        Test.stopTest();
+
+        System.assertEquals('processing', result.get('status'), 'Status should be processing');
+    }
+
+    /**
+     * Test checkUploadStatus returns 'processing' when no chunks and no final file
+     * (race condition: Queueable may have deleted chunks but not yet created final file)
+     */
+    @isTest
+    static void testCheckUploadStatusProcessingRaceCondition() {
+        Case testCase = new Case(Subject = 'Test Status Processing Race', Status = 'New');
+        insert testCase;
+
+        Test.startTest();
+        Map<String, Object> result = CaseFormController.checkUploadStatus(
+            testCase.Id, 'nonexistent-key', 'nonexistent-file.pdf'
+        );
+        Test.stopTest();
+
+        System.assertEquals('processing', result.get('status'), 'Status should be processing (race condition safe)');
+    }
+
+    /**
+     * Test checkUploadStatus returns 'error' when recent error log exists
+     */
+    @isTest
+    static void testCheckUploadStatusWithErrorLog() {
+        Case testCase = new Case(Subject = 'Test Status Error Log', Status = 'New');
+        insert testCase;
+
+        // Create a recent error log for this case
+        ErrorLogger.log('FileAssemblyQueueable: test error', 'stack trace', testCase.Id);
+
+        Test.startTest();
+        Map<String, Object> result = CaseFormController.checkUploadStatus(
+            testCase.Id, 'failed-key', 'failed-file.pdf'
+        );
+        Test.stopTest();
+
+        System.assertEquals('error', result.get('status'), 'Status should be error when error log exists');
+    }
+
+    /**
+     * Test chunkIndex bounds validation rejects invalid indices
+     */
+    @isTest
+    static void testUploadFileChunkInvalidIndex() {
+        Case testCase = new Case(Subject = 'Test Invalid Index', Status = 'New');
+        insert testCase;
+
+        String chunkData = EncodingUtil.base64Encode(Blob.valueOf('test'));
+
+        Test.startTest();
+
+        // Negative chunkIndex
+        Map<String, Object> r1 = CaseFormController.uploadFileChunk(
+            testCase.Id, 'file.txt', chunkData, -1, 3, 'key1'
+        );
+        System.assertEquals(false, r1.get('success'), 'Should fail with negative chunkIndex');
+
+        // chunkIndex >= totalChunks
+        Map<String, Object> r2 = CaseFormController.uploadFileChunk(
+            testCase.Id, 'file.txt', chunkData, 3, 3, 'key2'
+        );
+        System.assertEquals(false, r2.get('success'), 'Should fail with chunkIndex >= totalChunks');
+
+        // totalChunks < 1
+        Map<String, Object> r3 = CaseFormController.uploadFileChunk(
+            testCase.Id, 'file.txt', chunkData, 0, 0, 'key3'
+        );
+        System.assertEquals(false, r3.get('success'), 'Should fail with totalChunks < 1');
+
+        Test.stopTest();
+    }
+
+    /**
+     * Test uploadKey sanitization strips double underscores
+     */
+    @isTest
+    static void testUploadKeySanitization() {
+        Case testCase = new Case(Subject = 'Test Key Sanitization', Status = 'New');
+        insert testCase;
+
+        String chunkData = EncodingUtil.base64Encode(Blob.valueOf('test data'));
+        // uploadKey with __ should be sanitized to -
+        String uploadKey = 'bad__key__here';
+
+        Test.startTest();
+        Map<String, Object> result = CaseFormController.uploadFileChunk(
+            testCase.Id, 'file.txt', chunkData, 0, 1, uploadKey
+        );
+        Test.stopTest();
+
+        System.assertEquals(true, result.get('success'), 'Should succeed with sanitized key');
+        System.assertEquals(true, result.get('complete'), 'Single chunk should complete');
+    }
+
+    /**
+     * Test synchronous assembly still works for 3 or fewer chunks
+     */
+    @isTest
+    static void testSyncPathStillWorksForSmallFiles() {
+        Case testCase = new Case(Subject = 'Test Sync Path', Status = 'New');
+        insert testCase;
+
+        String fileName = 'small-document.txt';
+        String uploadKey = 'test-sync-key';
+
+        // Upload 3 chunks (sync path: totalChunks <= 3)
+        String chunk1Data = EncodingUtil.base64Encode(Blob.valueOf('Part1-'));
+        String chunk2Data = EncodingUtil.base64Encode(Blob.valueOf('Part2-'));
+        String chunk3Data = EncodingUtil.base64Encode(Blob.valueOf('Part3'));
+
+        Map<String, Object> r1 = CaseFormController.uploadFileChunk(testCase.Id, fileName, chunk1Data, 0, 3, uploadKey);
+        System.assertEquals(true, r1.get('success'));
+        System.assertEquals(false, r1.get('complete'));
+
+        Map<String, Object> r2 = CaseFormController.uploadFileChunk(testCase.Id, fileName, chunk2Data, 1, 3, uploadKey);
+        System.assertEquals(true, r2.get('success'));
+        System.assertEquals(false, r2.get('complete'));
+
+        Test.startTest();
+        Map<String, Object> r3 = CaseFormController.uploadFileChunk(testCase.Id, fileName, chunk3Data, 2, 3, uploadKey);
+        Test.stopTest();
+
+        // Sync path should return complete: true (NOT processing: true)
+        System.assertEquals(true, r3.get('success'), 'Should succeed');
+        System.assertEquals(true, r3.get('complete'), 'Should be complete (sync path)');
+        System.assertEquals(null, r3.get('processing'), 'Should NOT have processing flag (sync path)');
+
+        // Verify file content
+        List<ContentDocumentLink> cdls = [
+            SELECT ContentDocumentId FROM ContentDocumentLink WHERE LinkedEntityId = :testCase.Id
+        ];
+        Set<Id> docIds = new Set<Id>();
+        for (ContentDocumentLink cdl : cdls) {
+            docIds.add(cdl.ContentDocumentId);
+        }
+        List<ContentVersion> finalFiles = [
+            SELECT Title, VersionData FROM ContentVersion
+            WHERE ContentDocumentId IN :docIds AND Title = :fileName AND IsLatest = true
+        ];
+        System.assertEquals(1, finalFiles.size(), 'Final file should exist');
+        System.assertEquals('Part1-Part2-Part3', finalFiles[0].VersionData.toString(), 'Content should match');
+    }
+
+    /**
      * Mock class for successful reCAPTCHA verification
      */
     private class RecaptchaMockSuccess implements HttpCalloutMock {
@@ -1025,8 +1309,9 @@ private class CaseFormControllerTest {
         System.assertEquals('Chunk 1 Data - Chunk 2 Data - Chunk 3 Data', cv.VersionData.toString(), 'Combined content should match');
 
         // Verify chunk files were cleaned up
+        String chunkPattern = '__chunk__' + uploadKey + '%';
         List<ContentVersion> chunks = [
-            SELECT Id FROM ContentVersion WHERE Title LIKE :('__chunk__' + uploadKey + '%')
+            SELECT Id FROM ContentVersion WHERE Title LIKE :chunkPattern
         ];
         System.assertEquals(0, chunks.size(), 'Chunk files should be deleted after assembly');
     }

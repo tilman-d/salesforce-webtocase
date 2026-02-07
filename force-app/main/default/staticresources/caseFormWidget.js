@@ -27,7 +27,7 @@
     // Image compression settings
     var TARGET_SIZE_MB = 0.7;
     var MAX_IMAGE_SIZE = 25 * 1024 * 1024; // 25MB for images
-    var MAX_DOC_SIZE = 2 * 1024 * 1024;    // 2MB for documents
+    var MAX_DOC_SIZE = 4 * 1024 * 1024;    // 4MB for documents (async assembly supports up to ~4MB)
 
     // Supported image types for compression
     var SUPPORTED_IMAGE_TYPES = [
@@ -746,6 +746,9 @@
                         if (self.options.onSuccess) {
                             self.options.onSuccess(caseNumber);
                         }
+                    } else if (result.processing) {
+                        // Async assembly in progress - start polling
+                        self.pollUploadStatus(caseId, result.uploadKey, fileName, caseNumber, formId, 0);
                     } else {
                         // Upload next chunk
                         self.uploadChunkSequentially(caseId, fileName, arrayBuffer, chunkIndex + 1, totalChunks, uploadKey, caseNumber, formId);
@@ -761,6 +764,74 @@
                 self.showSuccess(caseNumber);
                 self.showFormError('File upload failed.');
             });
+        },
+
+        /**
+         * Poll for async file assembly completion via REST API
+         * Uses exponential backoff: 2s, 3s, 5s, 5s, 5s... up to 60s total
+         */
+        pollUploadStatus: function(caseId, uploadKey, fileName, caseNumber, formId, attempt) {
+            var self = this;
+            var POLL_INTERVALS = [2000, 3000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000];
+            var MAX_POLL_TIME = 60000;
+            var elapsed = 0;
+            for (var i = 0; i < attempt; i++) {
+                elapsed += (POLL_INTERVALS[i] || 5000);
+            }
+
+            if (elapsed >= MAX_POLL_TIME) {
+                self.setLoading(false);
+                self.showSuccess(caseNumber);
+                self.showFormError('Your case was created. The file is still being processed and will appear shortly.');
+                if (self.options.onSuccess) {
+                    self.options.onSuccess(caseNumber);
+                }
+                return;
+            }
+
+            var delay = POLL_INTERVALS[attempt] || 5000;
+            self.updateButtonText('Processing file...');
+
+            setTimeout(function() {
+                var url = self.options.apiBase + '/webtocase/v1/upload-status';
+
+                fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json'
+                    },
+                    credentials: 'omit',
+                    body: JSON.stringify({
+                        caseId: caseId,
+                        uploadKey: uploadKey,
+                        fileName: fileName,
+                        formId: formId
+                    })
+                })
+                .then(function(response) {
+                    return response.json();
+                })
+                .then(function(result) {
+                    if (result.status === 'complete') {
+                        self.setLoading(false);
+                        self.showSuccess(caseNumber);
+                        if (self.options.onSuccess) {
+                            self.options.onSuccess(caseNumber);
+                        }
+                    } else if (result.status === 'processing') {
+                        self.pollUploadStatus(caseId, uploadKey, fileName, caseNumber, formId, attempt + 1);
+                    } else {
+                        self.setLoading(false);
+                        self.showSuccess(caseNumber);
+                        self.showFormError('Your case was created, but the file could not be attached: ' + (result.error || 'Processing failed.'));
+                    }
+                })
+                .catch(function() {
+                    // Network error - retry
+                    self.pollUploadStatus(caseId, uploadKey, fileName, caseNumber, formId, attempt + 1);
+                });
+            }, delay);
         },
 
         /**
@@ -805,7 +876,7 @@
             }
 
             if (!isImage && file.size > MAX_DOC_SIZE) {
-                return { valid: false, error: 'File too large. Documents max 2MB.' };
+                return { valid: false, error: 'File too large. Documents max 4MB.' };
             }
 
             return { valid: true };

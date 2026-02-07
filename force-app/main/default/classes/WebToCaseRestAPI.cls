@@ -6,6 +6,7 @@
  * GET  /webtocase/v1/form/{formName} - Get form configuration + nonce
  * POST /webtocase/v1/submit          - Submit form data
  * POST /webtocase/v1/upload-chunk    - Upload file chunk
+ * POST /webtocase/v1/upload-status   - Check async upload assembly status
  */
 @RestResource(urlMapping='/webtocase/v1/*')
 global without sharing class WebToCaseRestAPI {
@@ -140,6 +141,8 @@ global without sharing class WebToCaseRestAPI {
                 handleSubmit(req, res);
             } else if (action == 'upload-chunk') {
                 handleUploadChunk(req, res);
+            } else if (action == 'upload-status') {
+                handleUploadStatus(req, res);
             } else {
                 sendErrorResponse(res, 400, 'Invalid action: ' + action);
             }
@@ -276,6 +279,49 @@ global without sharing class WebToCaseRestAPI {
         Map<String, Object> result = CaseFormController.uploadFileChunk(
             caseId, fileName, chunkData, chunkIndex, totalChunks, uploadKey
         );
+
+        sendSuccessResponse(res, result);
+    }
+
+    /**
+     * Handle upload status check (polling for async assembly completion)
+     */
+    private static void handleUploadStatus(RestRequest req, RestResponse res) {
+        // Parse request body
+        Map<String, Object> body;
+        try {
+            body = (Map<String, Object>) JSON.deserializeUntyped(req.requestBody.toString());
+        } catch (Exception e) {
+            sendErrorResponse(res, 400, 'Invalid JSON body');
+            return;
+        }
+
+        String caseId = (String) body.get('caseId');
+        String uploadKey = (String) body.get('uploadKey');
+        String fileName = (String) body.get('fileName');
+        String formId = (String) body.get('formId');
+
+        // Validate required fields
+        if (String.isBlank(caseId) || String.isBlank(uploadKey) ||
+            String.isBlank(fileName) || String.isBlank(formId)) {
+            sendErrorResponse(res, 400, 'Missing required parameters for upload status check');
+            return;
+        }
+
+        // Validate origin against the form's allowed domains
+        String origin = req.headers.get('Origin');
+        OriginValidationResult originResult = validateOriginForFormId(origin, formId);
+
+        if (!originResult.valid) {
+            sendErrorResponse(res, 403, originResult.error);
+            return;
+        }
+
+        // Set CORS headers
+        setCorsHeaders(res, origin);
+
+        // Call existing status check logic
+        Map<String, Object> result = CaseFormController.checkUploadStatus(caseId, uploadKey, fileName);
 
         sendSuccessResponse(res, result);
     }

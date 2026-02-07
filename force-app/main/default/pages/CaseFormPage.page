@@ -146,6 +146,7 @@
                     captchaSiteKey: '{!JSENCODE(captchaSiteKey)}',
                     remoteAction: '{!$RemoteAction.CaseFormController.submitForm}',
                     uploadChunkAction: '{!$RemoteAction.CaseFormController.uploadFileChunk}',
+                    checkUploadStatusAction: '{!$RemoteAction.CaseFormController.checkUploadStatus}',
                     isEmbedMode: {!isEmbedMode}
                 };
             </script>

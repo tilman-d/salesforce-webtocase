@@ -32,7 +32,7 @@ export default class FormDetail extends LightningElement {
         description: '',
         active: false,
         enableFileUpload: false,
-        maxFileSizeMB: 25, // Fixed: 25MB for images (auto-compressed), 2MB for documents (enforced in frontend)
+        maxFileSizeMB: 25, // Fixed: 25MB for images (auto-compressed), 4MB for documents (enforced in frontend)
         successMessage: '',
         enableCaptcha: false,
         siteId: null,
@@ -110,7 +110,7 @@ export default class FormDetail extends LightningElement {
                         description: result.description || '',
                         active: result.active || false,
                         enableFileUpload: result.enableFileUpload || false,
-                        maxFileSizeMB: 25, // Fixed: 25MB for images, 2MB for documents (enforced in frontend)
+                        maxFileSizeMB: 25, // Fixed: 25MB for images, 4MB for documents (enforced in frontend)
                         successMessage: result.successMessage || '',
                         enableCaptcha: result.enableCaptcha || false,
                         siteId: result.siteId || null,
@@ -139,7 +139,7 @@ export default class FormDetail extends LightningElement {
                 description: '',
                 active: false,
                 enableFileUpload: false,
-                maxFileSizeMB: 25, // Fixed: 25MB for images, 2MB for documents (enforced in frontend)
+                maxFileSizeMB: 25, // Fixed: 25MB for images, 4MB for documents (enforced in frontend)
                 successMessage: '',
                 enableCaptcha: false,
                 siteId: null,

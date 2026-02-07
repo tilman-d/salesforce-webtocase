@@ -21,7 +21,14 @@ global without sharing class CaseFormController {
     public Boolean isEmbedMode { get; set; }
 
     // Chunk size for file uploads (750KB raw = ~1MB Base64, safely under VF Remoting limits)
+    // IMPORTANT: CHUNK_SIZE must remain divisible by 3 (750000/3=250000) to ensure
+    // intermediate base64 chunks have no padding. Only the last chunk may have padding.
     private static final Integer CHUNK_SIZE = 750000;
+
+    // Threshold for async assembly: files with more than this many chunks
+    // use Queueable (12MB heap) instead of synchronous assembly (6MB heap).
+    // 3 chunks * 750KB = 2.25MB max for synchronous path.
+    private static final Integer SYNC_CHUNK_LIMIT = 3;
 
     /**
      * Constructor - loads form based on URL parameter
@@ -299,6 +306,27 @@ global without sharing class CaseFormController {
                 return result;
             }
 
+            // Validate chunkIndex bounds
+            if (chunkIndex == null || totalChunks == null || chunkIndex < 0 || chunkIndex >= totalChunks || totalChunks < 1) {
+                result.put('success', false);
+                result.put('error', 'Invalid chunk index or total chunks.');
+                return result;
+            }
+
+            // Validate individual chunk size (prevent oversized chunks that bypass file size estimation)
+            // Base64 encodes 3 bytes into 4 chars, so CHUNK_SIZE bytes = ceil(CHUNK_SIZE/3)*4 base64 chars
+            // Allow 10% margin for padding: max base64 length = CHUNK_SIZE * 4/3 + 100
+            Integer maxBase64Length = (CHUNK_SIZE * 4 / 3) + 100;
+            if (chunkData.length() > maxBase64Length) {
+                result.put('success', false);
+                result.put('error', 'Chunk data exceeds maximum allowed size.');
+                return result;
+            }
+
+            // Sanitize uploadKey: strip any double-underscores to prevent title parsing issues
+            // The chunk title format uses __ as delimiter, so uploadKey must not contain __
+            uploadKey = uploadKey.replace('__', '-');
+
             // Verify the Case exists
             List<Case> cases = [SELECT Id FROM Case WHERE Id = :caseId LIMIT 1];
             if (cases.isEmpty()) {
@@ -321,110 +349,32 @@ global without sharing class CaseFormController {
 
             // Check if this is the last chunk
             if (chunkIndex == totalChunks - 1) {
-                // Query chunk IDs first (without loading blob data into heap)
-                List<ContentDocumentLink> links = [
-                    SELECT ContentDocumentId
-                    FROM ContentDocumentLink
-                    WHERE LinkedEntityId = :caseId
-                ];
+                // Server-side file size validation before assembly/enqueue
+                // Estimate total file size: totalChunks * CHUNK_SIZE (last chunk may be smaller but this is a safe upper bound)
+                Long estimatedFileSize = (Long)totalChunks * CHUNK_SIZE;
 
-                Set<Id> docIds = new Set<Id>();
-                for (ContentDocumentLink link : links) {
-                    docIds.add(link.ContentDocumentId);
-                }
-
-                // Query chunk metadata only (no VersionData)
-                List<ContentVersion> chunkMeta = [
-                    SELECT Id, Title, ContentDocumentId
-                    FROM ContentVersion
-                    WHERE ContentDocumentId IN :docIds
-                      AND Title LIKE :('__chunk__' + uploadKey + '__%')
-                    ORDER BY Title ASC
-                ];
-
-                // Verify we have all chunks
-                if (chunkMeta.size() != totalChunks) {
+                // Use a 4MB hard cap (the technical limit of async assembly with 12MB Queueable heap)
+                Long maxAllowedBytes = 4L * 1024 * 1024;
+                if (estimatedFileSize > maxAllowedBytes) {
                     result.put('success', false);
-                    result.put('error', 'Missing file chunks. Expected ' + totalChunks + ', found ' + chunkMeta.size());
+                    result.put('error', 'File exceeds the maximum allowed size of 4MB.');
                     return result;
                 }
 
-                // Build a map of chunk index to ContentVersion Id
-                Map<Integer, Id> chunkIdMap = new Map<Integer, Id>();
-                Set<Id> chunkDocIdsToDelete = new Set<Id>();
+                // Async path: files with more than SYNC_CHUNK_LIMIT chunks use Queueable
+                if (totalChunks > SYNC_CHUNK_LIMIT) {
+                    // Enqueue async assembly job
+                    System.enqueueJob(new FileAssemblyQueueable(caseId, uploadKey, fileName, totalChunks));
 
-                for (ContentVersion chunk : chunkMeta) {
-                    // Parse chunk index from title: __chunk__{uploadKey}__{chunkIndex}__{totalChunks}__{fileName}
-                    String[] parts = chunk.Title.split('__');
-                    if (parts.size() >= 4) {
-                        Integer idx = Integer.valueOf(parts[3]);
-                        chunkIdMap.put(idx, chunk.Id);
-                        chunkDocIdsToDelete.add(chunk.ContentDocumentId);
-                    }
+                    result.put('success', true);
+                    result.put('complete', false);
+                    result.put('processing', true);
+                    result.put('uploadKey', uploadKey);
+                    result.put('message', 'File is being processed.');
+                } else {
+                    // Synchronous path for small files (<=3 chunks, <=2.25MB)
+                    assembleSynchronous(caseId, uploadKey, fileName, totalChunks, result);
                 }
-
-                // Assemble the complete file by querying each chunk's data one at a time
-                // This minimizes heap usage by not holding all chunks in memory simultaneously
-                String combinedBase64 = '';
-                for (Integer i = 0; i < totalChunks; i++) {
-                    if (!chunkIdMap.containsKey(i)) {
-                        result.put('success', false);
-                        result.put('error', 'Missing chunk ' + i);
-                        return result;
-                    }
-
-                    // Query single chunk's data
-                    ContentVersion chunk = [
-                        SELECT VersionData
-                        FROM ContentVersion
-                        WHERE Id = :chunkIdMap.get(i)
-                        LIMIT 1
-                    ];
-
-                    // Append to combined base64 and release chunk reference
-                    combinedBase64 += EncodingUtil.base64Encode(chunk.VersionData);
-                }
-
-                // Decode the complete file
-                Blob completeFile = EncodingUtil.base64Decode(combinedBase64);
-                combinedBase64 = null; // Release string memory
-
-                // Create the final ContentVersion
-                ContentVersion finalCv = new ContentVersion();
-                finalCv.Title = fileName;
-                finalCv.PathOnClient = fileName;
-                finalCv.VersionData = completeFile;
-                insert finalCv;
-
-                // Get the ContentDocumentId
-                ContentVersion insertedCv = [
-                    SELECT ContentDocumentId
-                    FROM ContentVersion
-                    WHERE Id = :finalCv.Id
-                ];
-
-                // Link file to Case
-                ContentDocumentLink cdl = new ContentDocumentLink();
-                cdl.ContentDocumentId = insertedCv.ContentDocumentId;
-                cdl.LinkedEntityId = caseId;
-                cdl.ShareType = 'V';
-                cdl.Visibility = 'AllUsers';
-                insert cdl;
-
-                // Clean up chunk files - use the doc IDs we collected earlier
-                // Wrap in try-catch so cleanup failures don't affect success response
-                try {
-                    if (!chunkDocIdsToDelete.isEmpty()) {
-                        delete [SELECT Id FROM ContentDocument WHERE Id IN :chunkDocIdsToDelete];
-                    }
-                } catch (Exception cleanupEx) {
-                    // Log but don't fail - the file was successfully uploaded
-                    System.debug('Chunk cleanup failed: ' + cleanupEx.getMessage());
-                }
-
-                result.put('success', true);
-                result.put('complete', true);
-                result.put('message', 'File uploaded successfully.');
             } else {
                 // Not the last chunk, just confirm receipt
                 result.put('success', true);
@@ -448,6 +398,204 @@ global without sharing class CaseFormController {
     @RemoteAction
     global static Integer getChunkSize() {
         return CHUNK_SIZE;
+    }
+
+    /**
+     * Assemble chunks synchronously (used for files with <= SYNC_CHUNK_LIMIT chunks)
+     * Extracted from uploadFileChunk to keep the method manageable.
+     */
+    private static void assembleSynchronous(String caseId, String uploadKey, String fileName,
+                                             Integer totalChunks, Map<String, Object> result) {
+        // Query chunk IDs first (without loading blob data into heap)
+        List<ContentDocumentLink> links = [
+            SELECT ContentDocumentId
+            FROM ContentDocumentLink
+            WHERE LinkedEntityId = :caseId
+        ];
+
+        Set<Id> docIds = new Set<Id>();
+        for (ContentDocumentLink link : links) {
+            docIds.add(link.ContentDocumentId);
+        }
+
+        // Query chunk metadata only (no VersionData)
+        String chunkPattern = '__chunk__' + uploadKey + '__%';
+        List<ContentVersion> chunkMeta = [
+            SELECT Id, Title, ContentDocumentId
+            FROM ContentVersion
+            WHERE ContentDocumentId IN :docIds
+              AND Title LIKE :chunkPattern
+            ORDER BY Title ASC
+        ];
+
+        // Verify we have all chunks
+        if (chunkMeta.size() != totalChunks) {
+            result.put('success', false);
+            result.put('error', 'Missing file chunks. Expected ' + totalChunks + ', found ' + chunkMeta.size());
+            return;
+        }
+
+        // Build a map of chunk index to ContentVersion Id
+        Map<Integer, Id> chunkIdMap = new Map<Integer, Id>();
+        Set<Id> chunkDocIdsToDelete = new Set<Id>();
+
+        for (ContentVersion chunk : chunkMeta) {
+            // Parse chunk index from title: __chunk__{uploadKey}__{chunkIndex}__{totalChunks}__{fileName}
+            String[] parts = chunk.Title.split('__');
+            if (parts.size() >= 4) {
+                Integer idx = Integer.valueOf(parts[3]);
+                chunkIdMap.put(idx, chunk.Id);
+                chunkDocIdsToDelete.add(chunk.ContentDocumentId);
+            }
+        }
+
+        // Assemble the complete file by querying each chunk's data one at a time
+        String combinedBase64 = '';
+        for (Integer i = 0; i < totalChunks; i++) {
+            if (!chunkIdMap.containsKey(i)) {
+                result.put('success', false);
+                result.put('error', 'Missing chunk ' + i);
+                return;
+            }
+
+            ContentVersion chunk = [
+                SELECT VersionData
+                FROM ContentVersion
+                WHERE Id = :chunkIdMap.get(i)
+                LIMIT 1
+            ];
+
+            combinedBase64 += EncodingUtil.base64Encode(chunk.VersionData);
+        }
+
+        // Decode the complete file
+        Blob completeFile = EncodingUtil.base64Decode(combinedBase64);
+        combinedBase64 = null; // Release string memory
+
+        // Create the final ContentVersion
+        ContentVersion finalCv = new ContentVersion();
+        finalCv.Title = fileName;
+        finalCv.PathOnClient = fileName;
+        finalCv.VersionData = completeFile;
+        insert finalCv;
+
+        // Get the ContentDocumentId
+        ContentVersion insertedCv = [
+            SELECT ContentDocumentId
+            FROM ContentVersion
+            WHERE Id = :finalCv.Id
+        ];
+
+        // Link file to Case
+        ContentDocumentLink cdl = new ContentDocumentLink();
+        cdl.ContentDocumentId = insertedCv.ContentDocumentId;
+        cdl.LinkedEntityId = caseId;
+        cdl.ShareType = 'V';
+        cdl.Visibility = 'AllUsers';
+        insert cdl;
+
+        // Clean up chunk files
+        try {
+            if (!chunkDocIdsToDelete.isEmpty()) {
+                delete [SELECT Id FROM ContentDocument WHERE Id IN :chunkDocIdsToDelete];
+            }
+        } catch (Exception cleanupEx) {
+            System.debug('Chunk cleanup failed: ' + cleanupEx.getMessage());
+        }
+
+        result.put('success', true);
+        result.put('complete', true);
+        result.put('message', 'File uploaded successfully.');
+    }
+
+    /**
+     * Check the status of an async file upload
+     * Called by client-side polling after Queueable is enqueued
+     * @param caseId ID of the Case
+     * @param uploadKey Unique key for the upload session
+     * @param fileName Expected final file name
+     * @return Map with status ('complete', 'processing', or 'error') and optional error message
+     */
+    @RemoteAction
+    global static Map<String, Object> checkUploadStatus(String caseId, String uploadKey, String fileName) {
+        Map<String, Object> result = new Map<String, Object>();
+
+        try {
+            // Query ContentDocumentLinks for this Case
+            List<ContentDocumentLink> links = [
+                SELECT ContentDocumentId
+                FROM ContentDocumentLink
+                WHERE LinkedEntityId = :caseId
+            ];
+
+            Set<Id> docIds = new Set<Id>();
+            for (ContentDocumentLink link : links) {
+                docIds.add(link.ContentDocumentId);
+            }
+
+            if (!docIds.isEmpty()) {
+                // Check for final (non-chunk) file with matching fileName
+                // Title = :fileName already ensures exact match, so no need for NOT LIKE filter
+                List<ContentVersion> finalFiles = [
+                    SELECT Id
+                    FROM ContentVersion
+                    WHERE ContentDocumentId IN :docIds
+                      AND Title = :fileName
+                      AND IsLatest = true
+                    LIMIT 1
+                ];
+
+                if (!finalFiles.isEmpty()) {
+                    result.put('status', 'complete');
+                    return result;
+                }
+
+                // Check for chunk files still present (assembly in progress)
+                String statusChunkPattern = '__chunk__' + uploadKey + '__%';
+                List<ContentVersion> chunks = [
+                    SELECT Id
+                    FROM ContentVersion
+                    WHERE ContentDocumentId IN :docIds
+                      AND Title LIKE :statusChunkPattern
+                    LIMIT 1
+                ];
+
+                if (!chunks.isEmpty()) {
+                    result.put('status', 'processing');
+                    return result;
+                }
+            }
+
+            // Check Error_Log__c for recent errors related to this case
+            List<Error_Log__c> recentErrors = [
+                SELECT Error_Message__c
+                FROM Error_Log__c
+                WHERE Form_Id__c = :caseId
+                  AND Timestamp__c >= :DateTime.now().addMinutes(-5)
+                ORDER BY Timestamp__c DESC
+                LIMIT 1
+            ];
+
+            if (!recentErrors.isEmpty()) {
+                result.put('status', 'error');
+                result.put('error', 'File processing failed. Please try uploading again.');
+                return result;
+            }
+
+            // No chunks, no final file, no error log:
+            // This can happen if the Queueable has been picked up by the platform
+            // and deleted chunks but hasn't yet created the final file.
+            // Return 'processing' to let the client continue polling rather than
+            // reporting a false failure.
+            result.put('status', 'processing');
+
+        } catch (Exception e) {
+            ErrorLogger.logException(e, caseId);
+            result.put('status', 'error');
+            result.put('error', 'Error checking upload status.');
+        }
+
+        return result;
     }
 
     /**

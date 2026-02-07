@@ -4,6 +4,12 @@ A Salesforce app that lets you create public web forms that submit Cases with fi
 
 ---
 
+## TODO: Verify Next Session
+
+- [ ] **Check Form Manager UI**: Confirm "Documents: up to 4MB" displays correctly (was showing cached "2MB" — org metadata verified correct, likely Salesforce LWC cache)
+
+---
+
 ## 🧪 MANUAL TESTING REQUIRED: reCAPTCHA Issues
 
 The following reCAPTCHA items need manual verification before release:
@@ -21,12 +27,12 @@ The following reCAPTCHA items need manual verification before release:
 
 | | |
 |---|---|
-| **Version** | v0.5.0 |
+| **Version** | v0.5.1 |
 | **Phases Complete** | 0-4 (MVP, Admin UI, Setup Wizard, reCAPTCHA, Embeddable Widget) |
 | **Next Up** | Phase 5 (Multi-file upload, custom field types) |
 | **Dev Org** | `devorg` (tilman.dietrich@gmail.com.dev) |
 | **GitHub** | https://github.com/tilman-d/salesforce-webtocase |
-| **Last Change** | Allow changing reCAPTCHA type without re-entering secret key |
+| **Last Change** | 4MB document upload limit with async Queueable assembly |
 
 ---
 
@@ -452,7 +458,7 @@ Form__c form = new Form__c(
     Active__c = true,
     Enable_File_Upload__c = true,
     Enable_Captcha__c = true  // Enable CAPTCHA
-    // Note: File limits are fixed (Images: 25MB auto-compressed, Documents: 2MB)
+    // Note: File limits are fixed (Images: 25MB auto-compressed, Documents: 4MB)
 );
 insert form;
 
@@ -562,6 +568,8 @@ force-app/main/default/
 │   ├── CaseFormControllerTest.cls
 │   ├── ErrorLogger.cls
 │   ├── ErrorLoggerTest.cls
+│   ├── FileAssemblyQueueable.cls        # Async chunk assembly (4MB support)
+│   ├── FileAssemblyQueueableTest.cls
 │   ├── FormAdminController.cls          # Phase 1
 │   ├── FormAdminControllerTest.cls      # Phase 1
 │   ├── SetupWizardController.cls        # Phase 2
@@ -630,6 +638,16 @@ force-app/main/default/
 
 ## Changelog
 
+### v0.5.1 (2026-02-07) - 4MB Document Upload Limit
+- **Increased document upload limit** from 2MB to 4MB using async Queueable assembly
+- **New Apex class**: `FileAssemblyQueueable` - Assembles file chunks asynchronously using 12MB Queueable heap
+  - Files <= 2MB (3 chunks): Assembled synchronously in CaseFormController (6MB heap)
+  - Files 2-4MB (4+ chunks): Assembled asynchronously via Queueable (12MB heap)
+- **Updated frontends**: caseFormScript.js (VF Remoting) and caseFormWidget.js (REST API) both enforce 4MB limit
+- **Updated backend**: CaseFormController and WebToCaseRestAPI enforce 4MB hard cap server-side
+- **Updated Admin UI**: Form Manager help text now reads "Documents: up to 4MB"
+- **Chunk pattern**: `__chunk__{uploadKey}__{chunkIndex}__{totalChunks}__{fileName}` (750KB chunks)
+
 ### v0.5.0 (2026-02-03) - Phase 4: Embeddable Widget
 - **Embeddable widget** for external websites with Shadow DOM isolation
 - **Two embed modes**: Inline widget (recommended) and iframe embed
@@ -666,10 +684,10 @@ force-app/main/default/
   - Compression target (0.7MB) ensures single-request upload without chunking
 - **Fixed file limits**: Removed user-configurable "Max File Size" setting
   - Images: Up to 25MB (auto-compressed)
-  - Documents (PDF, Word, etc.): Up to 2MB
+  - Documents (PDF, Word, etc.): Up to 4MB
   - Videos: Not supported (users prompted to email separately)
 - **Simplified UX**: "Enable File Upload" checkbox now shows help text with limits
-  - "Images: up to 25MB (auto-compressed) | Documents: up to 2MB"
+  - "Images: up to 25MB (auto-compressed) | Documents: up to 4MB"
 - **New static resource**: `imageCompression.js` - browser-image-compression library (v2.0.2)
 - **Removed**: "Max Document Size (MB)" input field from Form Manager
 
@@ -798,18 +816,17 @@ See the **🧪 MANUAL TESTING REQUIRED** section at the top of this README for t
 
 **Status:** Phases 0-4 complete. Ready for Phase 5 (multi-file upload, custom field types).
 
-**Recent changes (v0.5.0):**
-- Embeddable widget for external websites with Shadow DOM isolation
-- REST API (`/webtocase/v1/*`) with CORS support
-- Security: Origin validation, one-time nonces, rate limiting
-- Admin UI: Embed Code section with code snippets and domain allowlist
-- 175 Apex tests passing, 11 Playwright tests passing
+**Recent changes (v0.5.1):**
+- Document upload limit increased from 2MB to 4MB via async Queueable assembly
+- New `FileAssemblyQueueable` class for files >2MB
+- Updated all frontends (caseFormScript.js, caseFormWidget.js) and backends
+- Admin UI updated to show "Documents: up to 4MB"
 
 **File size limits (fixed):**
 | File Type | Limit | Behavior |
 |-----------|-------|----------|
 | Images (JPEG, PNG, HEIC, WebP, BMP) | 25MB | Auto-compressed to ~0.7MB |
-| Documents (PDF, Word, etc.) | 2MB | Hard limit |
+| Documents (PDF, Word, etc.) | 4MB | Hard limit (async assembly via Queueable) |
 | Videos | N/A | Not supported |
 
 **Key architecture notes:**
@@ -918,13 +935,15 @@ When creating the managed/unlocked package for AppExchange, include the followin
 | Count | `Count__c` |
 | Hour Bucket | `Hour_Bucket__c` |
 
-### Apex Classes (12)
+### Apex Classes (14)
 | Class | Description |
 |-------|-------------|
 | `CaseFormController` | Public form controller |
 | `CaseFormControllerTest` | Test class |
 | `ErrorLogger` | Error logging utility |
 | `ErrorLoggerTest` | Test class |
+| `FileAssemblyQueueable` | Async file chunk assembly for files >2MB (up to 4MB) |
+| `FileAssemblyQueueableTest` | Test class |
 | `FormAdminController` | Form Manager admin controller |
 | `FormAdminControllerTest` | Test class |
 | `SetupWizardController` | Setup Wizard controller |
@@ -1002,6 +1021,8 @@ When creating the managed/unlocked package for AppExchange, include the followin
         <members>CaseFormControllerTest</members>
         <members>ErrorLogger</members>
         <members>ErrorLoggerTest</members>
+        <members>FileAssemblyQueueable</members>
+        <members>FileAssemblyQueueableTest</members>
         <members>FormAdminController</members>
         <members>FormAdminControllerTest</members>
         <members>SetupWizardController</members>

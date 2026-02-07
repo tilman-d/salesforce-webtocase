@@ -572,6 +572,99 @@ private class WebToCaseRestAPITest {
         System.assertNotEquals(403, res.statusCode, 'Should not reject valid origin');
     }
 
+    // ==================== Upload Status Tests ====================
+
+    @isTest
+    static void testUploadStatusSuccess() {
+        Form__c form = [SELECT Id FROM Form__c WHERE Form_Name__c = 'embed-test-form' LIMIT 1];
+
+        // Create a Case and a completed file on it
+        Case testCase = new Case(Subject = 'Status Test', Status = 'New');
+        insert testCase;
+
+        ContentVersion cv = new ContentVersion();
+        cv.Title = 'completed-file.pdf';
+        cv.PathOnClient = 'completed-file.pdf';
+        cv.VersionData = Blob.valueOf('Test content');
+        insert cv;
+
+        ContentVersion insertedCv = [SELECT ContentDocumentId FROM ContentVersion WHERE Id = :cv.Id];
+        ContentDocumentLink cdl = new ContentDocumentLink();
+        cdl.ContentDocumentId = insertedCv.ContentDocumentId;
+        cdl.LinkedEntityId = testCase.Id;
+        cdl.ShareType = 'V';
+        cdl.Visibility = 'AllUsers';
+        insert cdl;
+
+        RestRequest req = new RestRequest();
+        req.requestURI = '/services/apexrest/webtocase/v1/upload-status';
+        req.httpMethod = 'POST';
+        req.headers.put('Origin', 'https://example.com');
+        req.requestBody = Blob.valueOf(JSON.serialize(new Map<String, Object>{
+            'caseId' => testCase.Id,
+            'uploadKey' => 'test-key',
+            'fileName' => 'completed-file.pdf',
+            'formId' => form.Id
+        }));
+        RestContext.request = req;
+        RestContext.response = new RestResponse();
+
+        Test.startTest();
+        WebToCaseRestAPI.handlePost();
+        Test.stopTest();
+
+        RestResponse res = RestContext.response;
+        System.assertEquals(200, res.statusCode, 'Should return 200');
+        Map<String, Object> response = (Map<String, Object>) JSON.deserializeUntyped(res.responseBody.toString());
+        System.assertEquals('complete', response.get('status'), 'Status should be complete');
+    }
+
+    @isTest
+    static void testUploadStatusMissingParams() {
+        RestRequest req = new RestRequest();
+        req.requestURI = '/services/apexrest/webtocase/v1/upload-status';
+        req.httpMethod = 'POST';
+        req.headers.put('Origin', 'https://example.com');
+        req.requestBody = Blob.valueOf(JSON.serialize(new Map<String, Object>{
+            'caseId' => 'testId'
+            // Missing uploadKey, fileName, formId
+        }));
+        RestContext.request = req;
+        RestContext.response = new RestResponse();
+
+        Test.startTest();
+        WebToCaseRestAPI.handlePost();
+        Test.stopTest();
+
+        RestResponse res = RestContext.response;
+        System.assertEquals(400, res.statusCode, 'Should return 400 for missing params');
+    }
+
+    @isTest
+    static void testUploadStatusUnauthorizedOrigin() {
+        Form__c form = [SELECT Id FROM Form__c WHERE Form_Name__c = 'embed-test-form' LIMIT 1];
+
+        RestRequest req = new RestRequest();
+        req.requestURI = '/services/apexrest/webtocase/v1/upload-status';
+        req.httpMethod = 'POST';
+        req.headers.put('Origin', 'https://evil.com');
+        req.requestBody = Blob.valueOf(JSON.serialize(new Map<String, Object>{
+            'caseId' => 'testId',
+            'uploadKey' => 'test-key',
+            'fileName' => 'test.pdf',
+            'formId' => form.Id
+        }));
+        RestContext.request = req;
+        RestContext.response = new RestResponse();
+
+        Test.startTest();
+        WebToCaseRestAPI.handlePost();
+        Test.stopTest();
+
+        RestResponse res = RestContext.response;
+        System.assertEquals(403, res.statusCode, 'Should return 403 for unauthorized origin');
+    }
+
     // ==================== FormAdminController Allowed Domains Test ====================
 
     @isTest

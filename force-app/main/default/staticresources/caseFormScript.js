@@ -24,7 +24,7 @@
     // This avoids chunked upload which has reliability issues with guest users
     var TARGET_SIZE_MB = 0.7;
     var MAX_IMAGE_SIZE = 25 * 1024 * 1024; // 25MB for images (will be compressed)
-    var MAX_DOC_SIZE = 2 * 1024 * 1024;    // 2MB for non-image files
+    var MAX_DOC_SIZE = 4 * 1024 * 1024;    // 4MB for non-image files (async assembly supports up to ~4MB)
 
     // Supported image MIME types for compression
     var SUPPORTED_IMAGE_TYPES = [
@@ -81,7 +81,7 @@
         if (!isSupportedImage(file) && file.size > MAX_DOC_SIZE) {
             return {
                 valid: false,
-                error: 'File too large. Documents must be under 2MB. For larger files, please email them after submitting.'
+                error: 'File too large. Documents must be under 4MB. For larger files, please email them after submitting.'
             };
         }
 
@@ -513,10 +513,14 @@
             function(result, event) {
                 if (event.status && result && result.success) {
                     if (result.complete) {
-                        // All chunks uploaded and file assembled
+                        // All chunks uploaded and file assembled synchronously
                         console.log('CaseForm: File upload complete');
                         setLoading(false);
                         showSuccess(caseNumber);
+                    } else if (result.processing) {
+                        // Async assembly in progress - start polling
+                        console.log('CaseForm: File assembly queued, polling for completion...');
+                        pollUploadStatus(caseId, result.uploadKey, fileName, caseNumber, 0);
                     } else {
                         // Upload next chunk
                         uploadChunkSequentially(caseId, fileName, arrayBuffer, chunkIndex + 1, totalChunks, uploadKey, caseNumber);
@@ -532,6 +536,68 @@
             },
             { escape: false, timeout: 120000 }
         );
+    }
+
+    /**
+     * Poll for async file assembly completion via VF Remoting
+     * Uses exponential backoff: 2s, 3s, 5s, 5s, 5s... up to 60s total
+     */
+    function pollUploadStatus(caseId, uploadKey, fileName, caseNumber, attempt) {
+        var POLL_INTERVALS = [2000, 3000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000];
+        var MAX_POLL_TIME = 60000; // 60 seconds total timeout
+        var elapsed = 0;
+        for (var i = 0; i < attempt; i++) {
+            elapsed += (POLL_INTERVALS[i] || 5000);
+        }
+
+        if (elapsed >= MAX_POLL_TIME) {
+            // Timeout - show success with warning
+            console.warn('CaseForm: Upload status polling timed out after 60s');
+            setLoading(false);
+            showSuccess(caseNumber);
+            showError('Your case was created. The file is still being processed and will appear shortly.');
+            return;
+        }
+
+        var delay = POLL_INTERVALS[attempt] || 5000;
+
+        // Update button text
+        var submitButton = document.getElementById('submitButton');
+        if (submitButton) {
+            submitButton.textContent = 'Processing file...';
+        }
+
+        setTimeout(function() {
+            Visualforce.remoting.Manager.invokeAction(
+                formConfig.checkUploadStatusAction,
+                caseId,
+                uploadKey,
+                fileName,
+                function(result, event) {
+                    if (event.status && result) {
+                        if (result.status === 'complete') {
+                            console.log('CaseForm: Async file assembly complete');
+                            setLoading(false);
+                            showSuccess(caseNumber);
+                        } else if (result.status === 'processing') {
+                            // Still processing, poll again
+                            pollUploadStatus(caseId, uploadKey, fileName, caseNumber, attempt + 1);
+                        } else {
+                            // Error
+                            console.error('CaseForm: Async assembly error -', result.error);
+                            setLoading(false);
+                            showSuccess(caseNumber);
+                            showError('Your case was created, but the file could not be attached: ' + (result.error || 'Processing failed.'));
+                        }
+                    } else {
+                        // Remote action failed - retry
+                        console.warn('CaseForm: Status check failed, retrying...');
+                        pollUploadStatus(caseId, uploadKey, fileName, caseNumber, attempt + 1);
+                    }
+                },
+                { escape: false, timeout: 30000 }
+            );
+        }, delay);
     }
 
     /**
