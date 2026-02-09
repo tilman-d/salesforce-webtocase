@@ -1176,6 +1176,147 @@ private class CaseFormControllerTest {
     }
 
     /**
+     * Test form submission with default case values applied
+     */
+    @isTest
+    static void testSubmitFormWithDefaultValues() {
+        Form__c testForm = [SELECT Id FROM Form__c WHERE Form_Name__c = 'test-form' LIMIT 1];
+        testForm.Default_Case_Values__c = '{"Priority":"High","Type":"Problem"}';
+        update testForm;
+
+        Map<String, String> fieldValues = new Map<String, String>{
+            'Subject' => 'Test With Defaults',
+            'SuppliedEmail' => 'defaults@example.com'
+        };
+
+        Test.startTest();
+        Map<String, Object> result = CaseFormController.submitForm(
+            testForm.Id, fieldValues, '', '', ''
+        );
+        Test.stopTest();
+
+        System.assertEquals(true, result.get('success'), 'Submission should succeed');
+
+        Case createdCase = [SELECT Priority, Type, Origin, Status FROM Case WHERE Subject = 'Test With Defaults'];
+        System.assertEquals('High', createdCase.Priority, 'Priority should be High from defaults');
+        System.assertEquals('Problem', createdCase.Type, 'Type should be Problem from defaults');
+        System.assertEquals('Web Form', createdCase.Origin, 'Origin should still be Web Form');
+    }
+
+    /**
+     * Test default values can override Origin and Status
+     */
+    @isTest
+    static void testSubmitFormDefaultsOverrideOriginStatus() {
+        Form__c testForm = [SELECT Id FROM Form__c WHERE Form_Name__c = 'test-form' LIMIT 1];
+        testForm.Default_Case_Values__c = '{"Origin":"Partner Form","Status":"Escalated"}';
+        update testForm;
+
+        Map<String, String> fieldValues = new Map<String, String>{
+            'Subject' => 'Test Override Origin Status'
+        };
+
+        Test.startTest();
+        Map<String, Object> result = CaseFormController.submitForm(
+            testForm.Id, fieldValues, '', '', ''
+        );
+        Test.stopTest();
+
+        System.assertEquals(true, result.get('success'), 'Submission should succeed');
+
+        Case createdCase = [SELECT Origin, Status FROM Case WHERE Subject = 'Test Override Origin Status'];
+        System.assertEquals('Partner Form', createdCase.Origin, 'Origin should be overridden');
+        System.assertEquals('Escalated', createdCase.Status, 'Status should be overridden');
+    }
+
+    /**
+     * Test invalid JSON in defaults is handled gracefully
+     */
+    @isTest
+    static void testSubmitFormDefaultsInvalidJson() {
+        Form__c testForm = [SELECT Id FROM Form__c WHERE Form_Name__c = 'test-form' LIMIT 1];
+        testForm.Default_Case_Values__c = '{not valid json}';
+        update testForm;
+
+        Map<String, String> fieldValues = new Map<String, String>{
+            'Subject' => 'Test Invalid JSON Defaults'
+        };
+
+        Test.startTest();
+        Map<String, Object> result = CaseFormController.submitForm(
+            testForm.Id, fieldValues, '', '', ''
+        );
+        Test.stopTest();
+
+        // Should still succeed - invalid JSON is logged and skipped
+        System.assertEquals(true, result.get('success'), 'Submission should succeed despite invalid JSON');
+
+        Case createdCase = [SELECT Origin, Status FROM Case WHERE Subject = 'Test Invalid JSON Defaults'];
+        System.assertEquals('Web Form', createdCase.Origin, 'Origin should be default fallback');
+        System.assertEquals('New', createdCase.Status, 'Status should be default fallback');
+
+        // Verify error was logged
+        List<Error_Log__c> logs = [SELECT Error_Message__c FROM Error_Log__c WHERE Form_Id__c = :testForm.Id];
+        System.assert(logs.size() > 0, 'Error should be logged for invalid JSON');
+    }
+
+    /**
+     * Test disallowed fields in defaults are silently ignored
+     */
+    @isTest
+    static void testSubmitFormDefaultsBlocksDisallowedFields() {
+        Form__c testForm = [SELECT Id FROM Form__c WHERE Form_Name__c = 'test-form' LIMIT 1];
+        // Manually set field to bypass admin validation (simulating DB-level data)
+        testForm.Default_Case_Values__c = '{"Priority":"High","AccountId":"001000000000001","Subject":"Hacked"}';
+        update testForm;
+
+        Map<String, String> fieldValues = new Map<String, String>{
+            'Subject' => 'Test Disallowed Fields'
+        };
+
+        Test.startTest();
+        Map<String, Object> result = CaseFormController.submitForm(
+            testForm.Id, fieldValues, '', '', ''
+        );
+        Test.stopTest();
+
+        System.assertEquals(true, result.get('success'), 'Submission should succeed');
+
+        Case createdCase = [SELECT Subject, Priority, AccountId FROM Case WHERE Subject = 'Test Disallowed Fields'];
+        System.assertEquals('High', createdCase.Priority, 'Allowed field Priority should be applied');
+        System.assertEquals(null, createdCase.AccountId, 'Disallowed AccountId should be ignored');
+        System.assertEquals('Test Disallowed Fields', createdCase.Subject, 'User-supplied Subject should win');
+    }
+
+    /**
+     * Test non-string JSON values are safely skipped
+     */
+    @isTest
+    static void testSubmitFormDefaultsNonStringValues() {
+        Form__c testForm = [SELECT Id FROM Form__c WHERE Form_Name__c = 'test-form' LIMIT 1];
+        testForm.Default_Case_Values__c = '{"Priority":123,"Type":"Problem"}';
+        update testForm;
+
+        Map<String, String> fieldValues = new Map<String, String>{
+            'Subject' => 'Test Non-String Values'
+        };
+
+        Test.startTest();
+        Map<String, Object> result = CaseFormController.submitForm(
+            testForm.Id, fieldValues, '', '', ''
+        );
+        Test.stopTest();
+
+        System.assertEquals(true, result.get('success'), 'Submission should succeed');
+
+        Case createdCase = [SELECT Priority, Type FROM Case WHERE Subject = 'Test Non-String Values'];
+        // String.valueOf(123) = '123' which is non-blank, so it gets applied as a string
+        // The DML may or may not succeed depending on org picklist config
+        // But the important thing is: Type should be 'Problem'
+        System.assertEquals('Problem', createdCase.Type, 'Type should be set from defaults');
+    }
+
+    /**
      * Test submitForm returns caseId for chunked uploads
      */
     @isTest

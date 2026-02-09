@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Default_Case_Values__c</fullName>
+    <description>JSON object of default Case field values applied when a case is created from this form. Example: {"Priority":"High","Type":"Problem"}. Allowed fields: Priority, Status, Origin, Type, Reason.</description>
+    <externalId>false</externalId>
+    <inlineHelpText>JSON object of default Case field values. Example: {"Priority":"High","Type":"Problem"}</inlineHelpText>
+    <label>Default Case Values</label>
+    <length>32768</length>
+    <required>false</required>
+    <type>LongTextArea</type>
+    <visibleLines>3</visibleLines>
+</CustomField>

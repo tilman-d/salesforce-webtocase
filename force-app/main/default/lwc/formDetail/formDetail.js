@@ -7,6 +7,7 @@ import saveForm from '@salesforce/apex/FormAdminController.saveForm';
 import saveFields from '@salesforce/apex/FormAdminController.saveFields';
 import getActiveSites from '@salesforce/apex/FormAdminController.getActiveSites';
 import getDefaultSiteInfo from '@salesforce/apex/FormAdminController.getDefaultSiteInfo';
+import getCaseFieldsForDefaults from '@salesforce/apex/FormAdminController.getCaseFieldsForDefaults';
 
 export default class FormDetail extends LightningElement {
     _formId;
@@ -49,6 +50,9 @@ export default class FormDetail extends LightningElement {
     @track sites = [];
     @track defaultSiteId = null;
     @track defaultBaseUrl = null;
+    @track defaultValues = [];
+    defaultFieldInfoMap = {};
+    defaultFieldOptions = [];
 
     fieldTypeOptions = [];
     caseFieldOptions = [];
@@ -88,6 +92,19 @@ export default class FormDetail extends LightningElement {
         }
     }
 
+    @wire(getCaseFieldsForDefaults)
+    wiredCaseFields({ data, error }) {
+        if (data) {
+            this.defaultFieldInfoMap = {};
+            this.defaultFieldOptions = data.map(f => {
+                this.defaultFieldInfoMap[f.apiName] = f;
+                return { label: f.label, value: f.apiName };
+            });
+        } else if (error) {
+            console.error('Error loading case fields for defaults:', error);
+        }
+    }
+
     connectedCallback() {
         this._isConnected = true;
         this.loadForm();
@@ -122,6 +139,21 @@ export default class FormDetail extends LightningElement {
                         tempId: `field-${index}`,
                         expanded: false
                     }));
+                    // Parse default case values JSON
+                    if (result.defaultCaseValues) {
+                        try {
+                            const parsed = JSON.parse(result.defaultCaseValues);
+                            this.defaultValues = Object.entries(parsed).map(([key, val], i) => ({
+                                fieldName: key,
+                                value: val,
+                                tempId: `default-${i}`
+                            }));
+                        } catch (e) {
+                            this.defaultValues = [];
+                        }
+                    } else {
+                        this.defaultValues = [];
+                    }
                     this.hasUnsavedChanges = false;
                 })
                 .catch(error => {
@@ -147,6 +179,7 @@ export default class FormDetail extends LightningElement {
                 publicUrl: null
             };
             this.fields = [];
+            this.defaultValues = [];
             this.isLoading = false;
             this.hasUnsavedChanges = false;
         }
@@ -157,7 +190,7 @@ export default class FormDetail extends LightningElement {
     }
 
     get activeSections() {
-        return ['settings', 'fields'];
+        return ['settings', 'fields', 'defaults'];
     }
 
     get pageTitle() {
@@ -298,6 +331,75 @@ export default class FormDetail extends LightningElement {
 
     get hasAllowedDomains() {
         return this.form.allowedDomains && this.form.allowedDomains.trim().length > 0;
+    }
+
+    // Default Case Values getters and handlers
+    get hasDefaultValues() {
+        return this.defaultValues && this.defaultValues.length > 0;
+    }
+
+    get canAddDefault() {
+        return this.defaultValues.length < 5;
+    }
+
+    get cannotAddDefault() {
+        return !this.canAddDefault;
+    }
+
+    get defaultValuesWithIndex() {
+        const usedFields = new Set(this.defaultValues.map(d => d.fieldName));
+        return this.defaultValues.map((dv, index) => {
+            // Available fields: current field + unused fields
+            const fieldOptions = this.defaultFieldOptions.filter(
+                opt => opt.value === dv.fieldName || !usedFields.has(opt.value)
+            );
+            const fieldInfo = this.defaultFieldInfoMap[dv.fieldName];
+            const isPicklist = fieldInfo && fieldInfo.fieldType === 'PICKLIST';
+            const picklistOptions = isPicklist
+                ? fieldInfo.picklistValues.map(pv => ({ label: pv.label, value: pv.value }))
+                : [];
+            return {
+                ...dv,
+                index,
+                fieldOptions,
+                isPicklist,
+                picklistOptions
+            };
+        });
+    }
+
+    handleAddDefault() {
+        this.defaultValues = [
+            ...this.defaultValues,
+            {
+                fieldName: '',
+                value: '',
+                tempId: `default-new-${Date.now()}`
+            }
+        ];
+        this.hasUnsavedChanges = true;
+    }
+
+    handleDefaultFieldChange(event) {
+        const index = parseInt(event.target.dataset.index, 10);
+        this.defaultValues[index].fieldName = event.detail.value;
+        this.defaultValues[index].value = ''; // Reset value on field change
+        this.defaultValues = [...this.defaultValues];
+        this.hasUnsavedChanges = true;
+    }
+
+    handleDefaultValueChange(event) {
+        const index = parseInt(event.target.dataset.index, 10);
+        const val = event.detail ? event.detail.value : event.target.value;
+        this.defaultValues[index].value = val;
+        this.defaultValues = [...this.defaultValues];
+        this.hasUnsavedChanges = true;
+    }
+
+    handleRemoveDefault(event) {
+        const index = parseInt(event.currentTarget.dataset.index, 10);
+        this.defaultValues = this.defaultValues.filter((_, i) => i !== index);
+        this.hasUnsavedChanges = true;
     }
 
     get embedApiBase() {
@@ -569,6 +671,15 @@ export default class FormDetail extends LightningElement {
         this.isSaving = true;
 
         try {
+            // Serialize default case values to JSON (or null if empty)
+            let defaultCaseValues = null;
+            const validDefaults = this.defaultValues.filter(d => d.fieldName && d.value);
+            if (validDefaults.length > 0) {
+                const obj = {};
+                validDefaults.forEach(d => { obj[d.fieldName] = d.value; });
+                defaultCaseValues = JSON.stringify(obj);
+            }
+
             // Save form first
             const formData = {
                 id: this.form.id,
@@ -581,7 +692,8 @@ export default class FormDetail extends LightningElement {
                 successMessage: this.form.successMessage,
                 enableCaptcha: this.form.enableCaptcha,
                 siteId: this.form.siteId,
-                allowedDomains: this.form.allowedDomains
+                allowedDomains: this.form.allowedDomains,
+                defaultCaseValues: defaultCaseValues
             };
 
             const formId = await saveForm({ formData: formData });

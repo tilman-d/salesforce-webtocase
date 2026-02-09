@@ -132,7 +132,8 @@ global without sharing class CaseFormController {
         try {
             // Validate form exists and is active
             List<Form__c> forms = [
-                SELECT Id, Form_Name__c, Enable_File_Upload__c, Max_File_Size_MB__c, Enable_Captcha__c
+                SELECT Id, Form_Name__c, Enable_File_Upload__c, Max_File_Size_MB__c, Enable_Captcha__c,
+                       Default_Case_Values__c
                 FROM Form__c
                 WHERE Id = :formId AND Active__c = true
                 LIMIT 1
@@ -195,12 +196,44 @@ global without sharing class CaseFormController {
                 }
             }
 
-            // Create the Case
+            // Create the Case with hardcoded fallbacks
             Case newCase = new Case();
             newCase.Origin = 'Web Form';
             newCase.Status = 'New';
 
-            // Map field values to Case fields
+            // Apply JSON defaults from form config (overrides hardcoded fallbacks)
+            // Security note: without sharing + no FLS check is intentional and consistent
+            // with the existing pattern for user-supplied fields (Guest User context).
+            Boolean defaultsApplied = false;
+            if (String.isNotBlank(form.Default_Case_Values__c)) {
+                try {
+                    Object parsed = JSON.deserializeUntyped(form.Default_Case_Values__c);
+                    if (parsed instanceof Map<String, Object>) {
+                        Map<String, Object> defaults = (Map<String, Object>) parsed;
+                        for (String fieldName : defaults.keySet()) {
+                            if (!CaseDefaultFieldConfig.ALLOWED_FIELDS.contains(fieldName)) {
+                                continue;
+                            }
+                            Object rawVal = defaults.get(fieldName);
+                            String strVal = String.valueOf(rawVal);
+                            if (String.isBlank(strVal) || strVal == 'null') {
+                                continue;
+                            }
+                            newCase.put(fieldName, strVal);
+                            defaultsApplied = true;
+                        }
+                    }
+                } catch (Exception jsonEx) {
+                    ErrorLogger.log('Invalid Default_Case_Values__c JSON on form ' + formId +
+                        '. Value: ' + form.Default_Case_Values__c,
+                        jsonEx.getMessage(), formId);
+                }
+            }
+
+            // Map user-supplied field values to Case fields.
+            // Precedence: hardcoded fallbacks (Origin/Status) -> JSON defaults override -> user fields override.
+            // In practice, user fields (Subject, Description, Supplied*) and default fields
+            // (Priority, Status, Origin, Type, Reason) are disjoint sets, so no conflict.
             if (fieldValues != null) {
                 for (String caseField : fieldValues.keySet()) {
                     String value = fieldValues.get(caseField);
@@ -222,7 +255,38 @@ global without sharing class CaseFormController {
                 }
             }
 
-            insert newCase;
+            // Insert with DML retry: if defaults cause a DML failure (e.g., invalid
+            // picklist value), build a fresh Case without defaults and retry once.
+            // This ensures stale/invalid picklist values never block case creation.
+            try {
+                insert newCase;
+            } catch (DmlException dmlEx) {
+                if (defaultsApplied) {
+                    ErrorLogger.log('DML failed with defaults, retrying without. Defaults: ' +
+                        form.Default_Case_Values__c, dmlEx.getMessage(), formId);
+                    // Build a fresh Case with only hardcoded fallbacks + user fields
+                    Case retryCase = new Case();
+                    retryCase.Origin = 'Web Form';
+                    retryCase.Status = 'New';
+                    if (fieldValues != null) {
+                        for (String cf : fieldValues.keySet()) {
+                            String v = fieldValues.get(cf);
+                            if (String.isNotBlank(v)) {
+                                if (cf == 'Subject') retryCase.Subject = v;
+                                else if (cf == 'Description') retryCase.Description = v;
+                                else if (cf == 'SuppliedName') retryCase.SuppliedName = v;
+                                else if (cf == 'SuppliedEmail') retryCase.SuppliedEmail = v;
+                                else if (cf == 'SuppliedPhone') retryCase.SuppliedPhone = v;
+                                else if (cf == 'SuppliedCompany') retryCase.SuppliedCompany = v;
+                            }
+                        }
+                    }
+                    insert retryCase;
+                    newCase = retryCase;
+                } else {
+                    throw dmlEx;
+                }
+            }
 
             // Attach file if provided and file upload is enabled
             if (form.Enable_File_Upload__c && String.isNotBlank(fileName) && String.isNotBlank(fileContent)) {

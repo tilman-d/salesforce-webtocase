@@ -27,12 +27,12 @@ The following reCAPTCHA items need manual verification before release:
 
 | | |
 |---|---|
-| **Version** | v0.5.1 |
+| **Version** | v0.5.2 |
 | **Phases Complete** | 0-4 (MVP, Admin UI, Setup Wizard, reCAPTCHA, Embeddable Widget) |
 | **Next Up** | Phase 5 (Multi-file upload, custom field types) |
 | **Dev Org** | `devorg` (tilman.dietrich@gmail.com.dev) |
 | **GitHub** | https://github.com/tilman-d/salesforce-webtocase |
-| **Last Change** | 4MB document upload limit with async Queueable assembly |
+| **Last Change** | Default Case Values for Form Admin |
 
 ---
 
@@ -551,7 +551,8 @@ force-app/main/default/
 │   │   └── fields/
 │   │       ├── Enable_Captcha__c        # Phase 3
 │   │       ├── Site_Id__c               # URL Display Feature
-│   │       └── Allowed_Domains__c       # Phase 4 - Embed allowlist
+│   │       ├── Allowed_Domains__c       # Phase 4 - Embed allowlist
+│   │       └── Default_Case_Values__c   # JSON defaults for hidden Case fields
 │   ├── Form_Field__c/                   # Field definitions
 │   ├── Error_Log__c/                    # Error logging
 │   ├── Rate_Limit_Counter__c/           # Phase 4 - Rate limiting
@@ -564,6 +565,7 @@ force-app/main/default/
 │           ├── Default_Site_Id__c       # URL Display Feature
 │           └── Default_Site_Base_Url__c # URL Display Feature
 ├── classes/
+│   ├── CaseDefaultFieldConfig.cls       # Shared allowlist for default Case fields
 │   ├── CaseFormController.cls
 │   ├── CaseFormControllerTest.cls
 │   ├── ErrorLogger.cls
@@ -637,6 +639,20 @@ force-app/main/default/
 ---
 
 ## Changelog
+
+### v0.5.2 (2026-02-09) - Default Case Values for Form Admin
+- **Default Case Values**: Admins can configure hidden Case field defaults per form (e.g., Priority=High, Type=Problem)
+- **JSON storage**: Defaults stored as JSON on `Form__c.Default_Case_Values__c` (LongTextArea)
+- **Allowlisted fields**: Priority, Status, Origin, Type, Reason — enforced server-side via `CaseDefaultFieldConfig`
+- **Config-time validation**: `FormAdminController.saveForm()` validates JSON structure, allowlist, and non-blank string values
+- **Submit-time application**: `CaseFormController.submitForm()` applies defaults between hardcoded fallbacks and user fields
+- **DML retry resilience**: If invalid picklist values cause DML failure, system retries with a fresh Case (no defaults), logs error
+- **Admin UI**: New "Default Case Values" accordion section in Form Detail with picklist-aware field/value selectors
+- **New Apex class**: `CaseDefaultFieldConfig` — shared allowlist constant used by both controllers
+- **New field**: `Form__c.Default_Case_Values__c` — LongTextArea(32768) for JSON defaults
+- **New method**: `FormAdminController.getCaseFieldsForDefaults()` — returns field metadata with active picklist values
+- **Updated permission set**: `Web_to_Case_Admin` — added read/edit for `Default_Case_Values__c`
+- **Test coverage**: 12 new test methods (7 in FormAdminControllerTest, 5 in CaseFormControllerTest)
 
 ### v0.5.1 (2026-02-07) - 4MB Document Upload Limit
 - **Increased document upload limit** from 2MB to 4MB using async Queueable assembly
@@ -814,13 +830,15 @@ See the **🧪 MANUAL TESTING REQUIRED** section at the top of this README for t
 
 ## Next Session Starting Point
 
-**Status:** Phases 0-4 complete. Ready for Phase 5 (multi-file upload, custom field types).
+**Status:** Phases 0-4 complete. v0.5.2 (Default Case Values) deployed and tested. Ready for Phase 5 (multi-file upload, custom field types).
 
-**Recent changes (v0.5.1):**
-- Document upload limit increased from 2MB to 4MB via async Queueable assembly
-- New `FileAssemblyQueueable` class for files >2MB
-- Updated all frontends (caseFormScript.js, caseFormWidget.js) and backends
-- Admin UI updated to show "Documents: up to 4MB"
+**Recent changes (v0.5.2):**
+- Default Case Values feature: admins can set hidden Case field defaults per form (Priority, Status, Origin, Type, Reason)
+- JSON stored on `Form__c.Default_Case_Values__c`, validated at config-time, applied at submit-time with DML retry
+- New `CaseDefaultFieldConfig` utility class, new LWC accordion section with picklist-aware UI
+- 12 new test methods across both test classes
+- All 204 Apex unit tests passing, 11/11 e2e backend tests passing
+- Deployed to devorg (66/66 components)
 
 **File size limits (fixed):**
 | File Type | Limit | Behavior |
@@ -885,7 +903,7 @@ When creating the managed/unlocked package for AppExchange, include the followin
 |-----------|----------|-------------|
 | Custom Setting (Hierarchy) | `reCAPTCHA_Settings__c` | reCAPTCHA API keys and settings (Protected) |
 
-### Custom Fields - Form__c (10)
+### Custom Fields - Form__c (11)
 | Field | API Name |
 |-------|----------|
 | Form Name | `Form_Name__c` |
@@ -898,6 +916,7 @@ When creating the managed/unlocked package for AppExchange, include the followin
 | Enable Captcha | `Enable_Captcha__c` |
 | Site Id | `Site_Id__c` |
 | Allowed Domains | `Allowed_Domains__c` (Phase 4) |
+| Default Case Values | `Default_Case_Values__c` - JSON defaults for hidden Case fields |
 
 ### Custom Fields - Form_Field__c (6)
 | Field | API Name |
@@ -935,9 +954,10 @@ When creating the managed/unlocked package for AppExchange, include the followin
 | Count | `Count__c` |
 | Hour Bucket | `Hour_Bucket__c` |
 
-### Apex Classes (14)
+### Apex Classes (15)
 | Class | Description |
 |-------|-------------|
+| `CaseDefaultFieldConfig` | Shared allowlist of Case fields for default values |
 | `CaseFormController` | Public form controller |
 | `CaseFormControllerTest` | Test class |
 | `ErrorLogger` | Error logging utility |
@@ -1017,6 +1037,7 @@ When creating the managed/unlocked package for AppExchange, include the followin
         <name>CustomObject</name>
     </types>
     <types>
+        <members>CaseDefaultFieldConfig</members>
         <members>CaseFormController</members>
         <members>CaseFormControllerTest</members>
         <members>ErrorLogger</members>

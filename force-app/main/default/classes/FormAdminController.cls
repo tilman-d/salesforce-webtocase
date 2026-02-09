@@ -21,6 +21,7 @@ public with sharing class FormAdminController {
         @AuraEnabled public String allowedDomains;
         @AuraEnabled public String publicUrl;
         @AuraEnabled public Integer fieldCount;
+        @AuraEnabled public String defaultCaseValues;
         @AuraEnabled public List<FieldWrapper> fields;
         @AuraEnabled public Datetime createdDate;
 
@@ -45,6 +46,7 @@ public with sharing class FormAdminController {
             this.enableCaptcha = form.Enable_Captcha__c;
             this.siteId = form.Site_Id__c;
             this.allowedDomains = form.Allowed_Domains__c;
+            this.defaultCaseValues = form.Default_Case_Values__c;
             this.fieldCount = fieldCount;
             this.fields = new List<FieldWrapper>();
             this.createdDate = form.CreatedDate;
@@ -157,7 +159,7 @@ public with sharing class FormAdminController {
         List<Form__c> forms = [
             SELECT Id, Form_Name__c, Title__c, Description__c, Active__c,
                    Enable_File_Upload__c, Max_File_Size_MB__c, Success_Message__c, Enable_Captcha__c,
-                   Site_Id__c, Allowed_Domains__c, CreatedDate
+                   Site_Id__c, Allowed_Domains__c, Default_Case_Values__c, CreatedDate
             FROM Form__c
             ORDER BY CreatedDate DESC
         ];
@@ -206,7 +208,7 @@ public with sharing class FormAdminController {
         List<Form__c> forms = [
             SELECT Id, Form_Name__c, Title__c, Description__c, Active__c,
                    Enable_File_Upload__c, Max_File_Size_MB__c, Success_Message__c, Enable_Captcha__c,
-                   Site_Id__c, Allowed_Domains__c, CreatedDate
+                   Site_Id__c, Allowed_Domains__c, Default_Case_Values__c, CreatedDate
             FROM Form__c
             WHERE Id = :formId
             LIMIT 1
@@ -266,6 +268,7 @@ public with sharing class FormAdminController {
         Boolean enableCaptcha = (Boolean)formData.get('enableCaptcha');
         String siteId = (String)formData.get('siteId');
         String allowedDomains = (String)formData.get('allowedDomains');
+        String defaultCaseValues = (String)formData.get('defaultCaseValues');
 
         // Validate required fields
         if (String.isBlank(formName)) {
@@ -304,6 +307,31 @@ public with sharing class FormAdminController {
         form.Enable_Captcha__c = enableCaptcha == true;
         form.Site_Id__c = String.isNotBlank(siteId) ? siteId : null;
         form.Allowed_Domains__c = allowedDomains;
+
+        // Validate and assign default case values
+        if (String.isNotBlank(defaultCaseValues)) {
+            try {
+                Object parsed = JSON.deserializeUntyped(defaultCaseValues);
+                if (!(parsed instanceof Map<String, Object>)) {
+                    throw createException('Default Case Values must be a JSON object');
+                }
+                Map<String, Object> defaults = (Map<String, Object>) parsed;
+                for (String key : defaults.keySet()) {
+                    if (!CaseDefaultFieldConfig.ALLOWED_FIELDS.contains(key)) {
+                        throw createException('Invalid default Case field: ' + key + '. Allowed fields: ' + CaseDefaultFieldConfig.ALLOWED_FIELDS);
+                    }
+                    Object val = defaults.get(key);
+                    if (val == null || !(val instanceof String) || String.isBlank((String) val)) {
+                        throw createException('Default value for ' + key + ' must be a non-blank string');
+                    }
+                }
+            } catch (JSONException je) {
+                throw createException('Default Case Values contains invalid JSON: ' + je.getMessage());
+            }
+            form.Default_Case_Values__c = defaultCaseValues;
+        } else {
+            form.Default_Case_Values__c = null;
+        }
 
         try {
             upsert form;
@@ -546,6 +574,55 @@ public with sharing class FormAdminController {
             // Return null on error
         }
         return null;
+    }
+
+    /**
+     * Wrapper class for Case field info used by default values UI
+     */
+    public class CaseFieldInfo {
+        @AuraEnabled public String apiName;
+        @AuraEnabled public String label;
+        @AuraEnabled public String fieldType;
+        @AuraEnabled public List<PicklistOption> picklistValues;
+
+        public CaseFieldInfo(String apiName, String label, String fieldType, List<PicklistOption> picklistValues) {
+            this.apiName = apiName;
+            this.label = label;
+            this.fieldType = fieldType;
+            this.picklistValues = picklistValues;
+        }
+    }
+
+    /**
+     * Get Case field metadata for the allowed default fields.
+     * Returns field labels, types, and active picklist values.
+     */
+    @AuraEnabled(cacheable=true)
+    public static List<CaseFieldInfo> getCaseFieldsForDefaults() {
+        List<CaseFieldInfo> result = new List<CaseFieldInfo>();
+        Map<String, Schema.SObjectField> caseFields = Schema.SObjectType.Case.fields.getMap();
+
+        for (String fieldName : CaseDefaultFieldConfig.ALLOWED_FIELDS) {
+            Schema.SObjectField field = caseFields.get(fieldName.toLowerCase());
+            if (field == null) {
+                continue;
+            }
+            Schema.DescribeFieldResult dfr = field.getDescribe();
+            String fieldType = dfr.getType().name();
+            List<PicklistOption> plValues = new List<PicklistOption>();
+
+            if (dfr.getType() == Schema.DisplayType.PICKLIST) {
+                for (Schema.PicklistEntry pe : dfr.getPicklistValues()) {
+                    if (pe.isActive()) {
+                        plValues.add(new PicklistOption(pe.getLabel(), pe.getValue()));
+                    }
+                }
+            }
+
+            result.add(new CaseFieldInfo(fieldName, dfr.getLabel(), fieldType, plValues));
+        }
+
+        return result;
     }
 
     /**

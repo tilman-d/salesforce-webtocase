@@ -724,6 +724,153 @@ private class FormAdminControllerTest {
         System.assertEquals(null, updatedForm.Site_Id__c, 'Site ID should be cleared');
     }
 
+    // ==================== Default Case Values Tests ====================
+
+    @isTest
+    static void testGetCaseFieldsForDefaults() {
+        Test.startTest();
+        List<FormAdminController.CaseFieldInfo> fields = FormAdminController.getCaseFieldsForDefaults();
+        Test.stopTest();
+
+        System.assertEquals(5, fields.size(), 'Should return 5 allowed fields');
+
+        // Verify all fields have required properties
+        Set<String> returnedNames = new Set<String>();
+        for (FormAdminController.CaseFieldInfo fi : fields) {
+            returnedNames.add(fi.apiName);
+            System.assertNotEquals(null, fi.label, 'Label should not be null for ' + fi.apiName);
+            System.assertNotEquals(null, fi.fieldType, 'Field type should not be null for ' + fi.apiName);
+            // Picklist fields should have values
+            if (fi.fieldType == 'PICKLIST') {
+                System.assert(fi.picklistValues.size() > 0, 'Picklist field ' + fi.apiName + ' should have values');
+            }
+        }
+
+        // Verify expected fields are present
+        System.assert(returnedNames.contains('Priority'), 'Should contain Priority');
+        System.assert(returnedNames.contains('Status'), 'Should contain Status');
+        System.assert(returnedNames.contains('Origin'), 'Should contain Origin');
+        System.assert(returnedNames.contains('Type'), 'Should contain Type');
+        System.assert(returnedNames.contains('Reason'), 'Should contain Reason');
+    }
+
+    @isTest
+    static void testSaveFormWithDefaultCaseValues() {
+        Map<String, Object> formData = createFormData(
+            null, 'defaults-test', 'Defaults Test Form', null,
+            true, false, 10, null
+        );
+        formData.put('defaultCaseValues', '{"Priority":"High","Type":"Problem"}');
+
+        Test.startTest();
+        String formId = FormAdminController.saveForm(formData);
+        Test.stopTest();
+
+        // Verify round-trip
+        Form__c savedForm = [SELECT Default_Case_Values__c FROM Form__c WHERE Id = :formId];
+        System.assertNotEquals(null, savedForm.Default_Case_Values__c, 'Default case values should be saved');
+        System.assert(savedForm.Default_Case_Values__c.contains('Priority'), 'Should contain Priority');
+        System.assert(savedForm.Default_Case_Values__c.contains('High'), 'Should contain High');
+
+        // Verify it loads back via getFormWithFields
+        FormAdminController.FormWrapper wrapper = FormAdminController.getFormWithFields(formId);
+        System.assertEquals('{"Priority":"High","Type":"Problem"}', wrapper.defaultCaseValues, 'Wrapper should have default values');
+    }
+
+    @isTest
+    static void testSaveFormRejectsInvalidDefaultFieldName() {
+        Map<String, Object> formData = createFormData(
+            null, 'bad-field-test', 'Bad Field Test', null,
+            false, false, 10, null
+        );
+        formData.put('defaultCaseValues', '{"AccountId":"001000000000001"}');
+
+        Test.startTest();
+        try {
+            FormAdminController.saveForm(formData);
+            System.assert(false, 'Should have thrown exception');
+        } catch (AuraHandledException e) {
+            System.assert(e.getMessage().contains('Invalid default Case field'), 'Should reject disallowed field');
+        }
+        Test.stopTest();
+    }
+
+    @isTest
+    static void testSaveFormRejectsInvalidJson() {
+        Map<String, Object> formData = createFormData(
+            null, 'bad-json-test', 'Bad JSON Test', null,
+            false, false, 10, null
+        );
+        formData.put('defaultCaseValues', '{not valid json}');
+
+        Test.startTest();
+        try {
+            FormAdminController.saveForm(formData);
+            System.assert(false, 'Should have thrown exception');
+        } catch (AuraHandledException e) {
+            System.assert(e.getMessage().contains('invalid JSON'), 'Should reject malformed JSON');
+        }
+        Test.stopTest();
+    }
+
+    @isTest
+    static void testSaveFormRejectsBlankDefaultValue() {
+        Map<String, Object> formData = createFormData(
+            null, 'blank-val-test', 'Blank Val Test', null,
+            false, false, 10, null
+        );
+        formData.put('defaultCaseValues', '{"Priority":""}');
+
+        Test.startTest();
+        try {
+            FormAdminController.saveForm(formData);
+            System.assert(false, 'Should have thrown exception');
+        } catch (AuraHandledException e) {
+            System.assert(e.getMessage().contains('non-blank string'), 'Should reject blank value');
+        }
+        Test.stopTest();
+    }
+
+    @isTest
+    static void testSaveFormClearsDefaultValues() {
+        // Create a form with defaults first
+        Form__c form = new Form__c(
+            Form_Name__c = 'clear-defaults-test',
+            Title__c = 'Clear Defaults Test',
+            Default_Case_Values__c = '{"Priority":"High"}'
+        );
+        insert form;
+
+        // Update with null defaults to clear
+        Map<String, Object> formData = createFormData(
+            form.Id, 'clear-defaults-test', 'Clear Defaults Test', null,
+            false, false, 10, null
+        );
+        formData.put('defaultCaseValues', null);
+
+        Test.startTest();
+        FormAdminController.saveForm(formData);
+        Test.stopTest();
+
+        Form__c updated = [SELECT Default_Case_Values__c FROM Form__c WHERE Id = :form.Id];
+        System.assertEquals(null, updated.Default_Case_Values__c, 'Default values should be cleared');
+    }
+
+    @isTest
+    static void testCaseFieldInfoWrapper() {
+        List<FormAdminController.PicklistOption> opts = new List<FormAdminController.PicklistOption>();
+        opts.add(new FormAdminController.PicklistOption('High', 'High'));
+
+        FormAdminController.CaseFieldInfo info = new FormAdminController.CaseFieldInfo(
+            'Priority', 'Priority', 'PICKLIST', opts
+        );
+
+        System.assertEquals('Priority', info.apiName, 'apiName should match');
+        System.assertEquals('Priority', info.label, 'label should match');
+        System.assertEquals('PICKLIST', info.fieldType, 'fieldType should match');
+        System.assertEquals(1, info.picklistValues.size(), 'Should have 1 picklist value');
+    }
+
     @isTest
     static void testGetFormsWithPublicUrl() {
         // Insert default site settings
