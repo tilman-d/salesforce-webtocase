@@ -61,12 +61,12 @@ The following reCAPTCHA items need manual verification before release:
 
 | | |
 |---|---|
-| **Version** | v0.6.0 |
+| **Version** | v0.6.1 |
 | **Phases Complete** | 0-4 (MVP, Admin UI, Setup Wizard, reCAPTCHA, Embeddable Widget) |
 | **Next Up** | Phase 5 (Multi-file upload, custom field types) |
 | **Dev Org** | `devorg` (tilman.dietrich@gmail.com.dev) |
 | **GitHub** | https://github.com/tilman-d/salesforce-webtocase |
-| **Last Change** | Custom HTML Connect Mode + Extended CSS Variables |
+| **Last Change** | Configuration Status Dashboard + Setup Wizard UI fix |
 
 ---
 
@@ -181,6 +181,7 @@ Access via the **Setup Wizard** tab or the **Web-to-Case Forms** app in the App 
 
 ### LWC Components
 - **setupWizard** - Multi-step wizard with progress indicator
+- **setupStatus** - Configuration Status Dashboard (embedded in Setup Wizard page)
 
 ### Metadata
 - **Setup_Wizard.flexipage-meta.xml** - Lightning App Page
@@ -711,6 +712,7 @@ force-app/main/default/
 ├── lwc/
 │   ├── formAdminApp/                    # Phase 1 - Main admin container
 │   ├── formDetail/                      # Phase 1 - Form editor (+ CAPTCHA toggle)
+│   ├── setupStatus/                     # Configuration Status Dashboard
 │   └── setupWizard/                     # Phase 2 - Setup wizard
 ├── flexipages/
 │   ├── Form_Manager.flexipage-meta.xml  # Phase 1
@@ -767,6 +769,15 @@ force-app/main/default/
 ---
 
 ## Changelog
+
+### v0.6.1 (2026-02-10) - Configuration Status Dashboard + Setup Wizard UI Fix
+- **New LWC: `setupStatus`** - Configuration Status Dashboard showing real-time setup health
+  - Displays Site configuration, Guest User permissions, reCAPTCHA status, and public form URL
+  - Embedded in the Setup Wizard Lightning page alongside the wizard
+  - Uses `SetupWizardController.getFullStatus()` for live status checks
+  - Copy-to-clipboard for public form URL
+  - Collapsible permission details section
+- **Setup Wizard progress indicator**: Reverted from `type="path"` (chevron/arrow) to `type="base"` (standard dot stepper)
 
 ### v0.6.0 (2026-02-10) - Custom HTML Connect Mode + Extended CSS Variables
 - **Connect mode** (`WebToCaseForm.connect()`): Bind submission logic to user's own HTML form — no Shadow DOM, full design control
@@ -975,15 +986,17 @@ See the **🧪 MANUAL TESTING REQUIRED** section at the top of this README for t
 
 ## Next Session Starting Point
 
-**Status:** Phases 0-4 complete. v0.6.0 (Custom HTML Connect Mode + Extended CSS Variables) deployed. **Needs manual testing** — see top of README. Ready for Phase 5 after testing.
+**Status:** Phases 0-4 complete. v0.6.1 deployed. **Needs manual testing** — see top of README. Ready for Phase 5 after testing.
 
-**Recent changes (v0.6.0):**
+**Recent changes (v0.6.1):**
+- New `setupStatus` LWC: Configuration Status Dashboard embedded in Setup Wizard page
+- Setup Wizard progress indicator reverted to standard dot stepper (`type="base"`)
+
+**Previous (v0.6.0):**
 - Custom HTML connect mode: `WebToCaseForm.connect()` for full design control (no Shadow DOM)
 - Extended CSS variables: 28 variables for comprehensive widget theming
 - SubmissionMixin: internal refactor for code reuse between FormWidget and ConnectedForm
 - Admin UI: Embed Code section redesigned with scoped tabs (Widget / Custom HTML / iframe)
-- "Generate Embed Code" confirmation button prevents premature code generation
-- Custom HTML tab generates HTML/CSS/JS snippets from actual form fields
 - No backend changes — uses same REST endpoints
 - Deployed to devorg
 
@@ -1120,11 +1133,12 @@ When creating the managed/unlocked package for AppExchange, include the followin
 | `WebToCaseRateLimiter` | Rate limiting logic (Phase 4) |
 | `WebToCaseRestAPITest` | Test class (Phase 4) |
 
-### Lightning Web Components (3)
+### Lightning Web Components (4)
 | Component | Description |
 |-----------|-------------|
 | `formAdminApp` | Form Manager main container |
 | `formDetail` | Form editor with field management |
+| `setupStatus` | Configuration Status Dashboard |
 | `setupWizard` | Post-install setup wizard |
 
 ### Visualforce Pages (1)
@@ -1204,6 +1218,7 @@ When creating the managed/unlocked package for AppExchange, include the followin
     <types>
         <members>formAdminApp</members>
         <members>formDetail</members>
+        <members>setupStatus</members>
         <members>setupWizard</members>
         <name>LightningComponentBundle</name>
     </types>

@@ -1,0 +1,42 @@
+.status-box {
+    min-height: 130px;
+}
+
+.status-list {
+    margin: 0;
+}
+
+.status-item {
+    display: flex;
+    align-items: baseline;
+    margin-bottom: 0.25rem;
+}
+
+.status-item dt {
+    font-weight: 600;
+    min-width: 70px;
+    margin-right: 0.5rem;
+    color: var(--slds-g-color-neutral-base-30, #706e6b);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+}
+
+.status-item dd {
+    margin: 0;
+}
+
+.url-text {
+    word-break: break-all;
+    font-size: 0.8125rem;
+}
+
+/* Badge variant styling */
+.success lightning-badge {
+    --sds-c-badge-color-background: var(--slds-g-color-success-base-50, #2e844a);
+    --sds-c-badge-text-color: #fff;
+}
+
+.warning lightning-badge {
+    --sds-c-badge-color-background: var(--slds-g-color-warning-base-50, #fe9339);
+    --sds-c-badge-text-color: #080707;
+}

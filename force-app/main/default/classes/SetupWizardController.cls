@@ -156,6 +156,121 @@ public with sharing class SetupWizardController {
     }
 
     /**
+     * Wrapper for full configuration status (used by setupStatus dashboard)
+     */
+    public class FullStatusResult {
+        @AuraEnabled public Boolean isConfigured;
+        @AuraEnabled public String defaultSiteId;
+        @AuraEnabled public String siteName;
+        @AuraEnabled public String siteBaseUrl;
+        @AuraEnabled public String siteStatus;
+        @AuraEnabled public String publicFormUrl;
+        @AuraEnabled public Integer permissionsPassing;
+        @AuraEnabled public Integer permissionsTotal;
+        @AuraEnabled public Boolean allPermissionsPassed;
+        @AuraEnabled public List<PermissionStatus> permissions;
+        @AuraEnabled public Boolean recaptchaConfigured;
+        @AuraEnabled public String recaptchaType;
+        @AuraEnabled public String recaptchaSiteKeyMasked;
+        @AuraEnabled public String errorMessage;
+        @AuraEnabled public String permissionsError;
+        @AuraEnabled public String publicUrlError;
+
+        public FullStatusResult() {
+            this.isConfigured = false;
+            this.permissionsPassing = 0;
+            this.permissionsTotal = 0;
+            this.allPermissionsPassed = false;
+            this.permissions = new List<PermissionStatus>();
+            this.recaptchaConfigured = false;
+        }
+    }
+
+    /**
+     * Get full configuration status for the status dashboard
+     * Returns site info, permission summary, and reCAPTCHA status in a single call.
+     * NOT cacheable — imperative call allows refresh after wizard completes.
+     */
+    @AuraEnabled
+    public static FullStatusResult getFullStatus() {
+        FullStatusResult result = new FullStatusResult();
+
+        try {
+            // 1. Read org-level settings
+            reCAPTCHA_Settings__c settings = reCAPTCHA_Settings__c.getOrgDefaults();
+
+            if (settings == null || settings.Id == null || String.isBlank(settings.Default_Site_Id__c)) {
+                result.isConfigured = false;
+                return result;
+            }
+
+            result.isConfigured = true;
+            result.defaultSiteId = settings.Default_Site_Id__c;
+
+            // 2. Populate reCAPTCHA fields
+            result.recaptchaConfigured = String.isNotBlank(settings.Site_Key__c) &&
+                                          String.isNotBlank(settings.Secret_Key__c);
+            result.recaptchaType = String.isNotBlank(settings.Captcha_Type__c) ?
+                                   settings.Captcha_Type__c : 'V2_Checkbox';
+            if (String.isNotBlank(settings.Site_Key__c)) {
+                String siteKey = settings.Site_Key__c;
+                result.recaptchaSiteKeyMasked = siteKey.length() > 6 ?
+                    siteKey.substring(0, 6) + '...' : siteKey + '...';
+            }
+
+            // 3. Query Site record
+            try {
+                Site site = [SELECT Id, Name, MasterLabel, Status, Subdomain, UrlPathPrefix
+                             FROM Site WHERE Id = :settings.Default_Site_Id__c LIMIT 1];
+                result.siteName = site.MasterLabel;
+                result.siteStatus = site.Status;
+                result.siteBaseUrl = getSiteBaseUrl(site);
+            } catch (QueryException e) {
+                result.isConfigured = false;
+                result.errorMessage = 'The configured Site was not found. It may have been deleted. Please re-run the wizard.';
+                return result;
+            } catch (Exception e) {
+                result.isConfigured = false;
+                result.errorMessage = 'Error loading Site details: ' + e.getMessage();
+                ErrorLogger.logException(e, null);
+                return result;
+            }
+
+            // 4. Get canonical public URL
+            try {
+                result.publicFormUrl = getPublicUrl(settings.Default_Site_Id__c, null);
+            } catch (Exception e) {
+                result.publicUrlError = 'Unable to determine public URL: ' + e.getMessage();
+                ErrorLogger.logException(e, null);
+            }
+
+            // 5. Check permissions
+            try {
+                ValidationResult validation = getSetupStatus(settings.Default_Site_Id__c);
+                result.permissions = validation.permissions;
+                result.allPermissionsPassed = validation.allPassed;
+                Integer passing = 0;
+                for (PermissionStatus ps : validation.permissions) {
+                    if (ps.configured) {
+                        passing++;
+                    }
+                }
+                result.permissionsPassing = passing;
+                result.permissionsTotal = validation.permissions.size();
+            } catch (Exception e) {
+                result.permissionsError = 'Unable to check permissions: ' + e.getMessage();
+                ErrorLogger.logException(e, null);
+            }
+
+        } catch (Exception e) {
+            result.errorMessage = 'Error loading configuration status: ' + e.getMessage();
+            ErrorLogger.logException(e, null);
+        }
+
+        return result;
+    }
+
+    /**
      * Helper method to create AuraHandledException with proper message
      */
     private static AuraHandledException createException(String message) {

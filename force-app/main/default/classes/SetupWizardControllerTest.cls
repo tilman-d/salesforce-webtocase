@@ -915,6 +915,160 @@ private class SetupWizardControllerTest {
         System.assert(result.errorMessage.contains('threshold'), 'Should mention threshold range');
     }
 
+    // ==================== getFullStatus / FullStatusResult Tests ====================
+
+    /**
+     * Test FullStatusResult wrapper default values
+     */
+    @isTest
+    static void testFullStatusResultWrapper() {
+        SetupWizardController.FullStatusResult result = new SetupWizardController.FullStatusResult();
+
+        System.assertEquals(false, result.isConfigured, 'isConfigured should default to false');
+        System.assertEquals(null, result.defaultSiteId, 'defaultSiteId should be null');
+        System.assertEquals(null, result.siteName, 'siteName should be null');
+        System.assertEquals(null, result.siteBaseUrl, 'siteBaseUrl should be null');
+        System.assertEquals(null, result.siteStatus, 'siteStatus should be null');
+        System.assertEquals(null, result.publicFormUrl, 'publicFormUrl should be null');
+        System.assertEquals(0, result.permissionsPassing, 'permissionsPassing should be 0');
+        System.assertEquals(0, result.permissionsTotal, 'permissionsTotal should be 0');
+        System.assertEquals(false, result.allPermissionsPassed, 'allPermissionsPassed should default to false');
+        System.assertNotEquals(null, result.permissions, 'permissions should be initialized');
+        System.assertEquals(0, result.permissions.size(), 'permissions should be empty');
+        System.assertEquals(false, result.recaptchaConfigured, 'recaptchaConfigured should default to false');
+        System.assertEquals(null, result.recaptchaType, 'recaptchaType should be null');
+        System.assertEquals(null, result.recaptchaSiteKeyMasked, 'recaptchaSiteKeyMasked should be null');
+        System.assertEquals(null, result.errorMessage, 'errorMessage should be null');
+    }
+
+    /**
+     * Test getFullStatus - no settings exist (wizard never run)
+     */
+    @isTest
+    static void testGetFullStatusNotConfigured() {
+        Test.startTest();
+        SetupWizardController.FullStatusResult result = SetupWizardController.getFullStatus();
+        Test.stopTest();
+
+        System.assertEquals(false, result.isConfigured, 'Should not be configured when no settings exist');
+        System.assertEquals(null, result.defaultSiteId, 'defaultSiteId should be null');
+    }
+
+    /**
+     * Test getFullStatus - settings exist but no Default_Site_Id__c
+     */
+    @isTest
+    static void testGetFullStatusBlankSiteId() {
+        reCAPTCHA_Settings__c settings = new reCAPTCHA_Settings__c(
+            SetupOwnerId = UserInfo.getOrganizationId(),
+            Site_Key__c = 'TestKey',
+            Secret_Key__c = 'TestSecret'
+            // Default_Site_Id__c is blank
+        );
+        insert settings;
+
+        Test.startTest();
+        SetupWizardController.FullStatusResult result = SetupWizardController.getFullStatus();
+        Test.stopTest();
+
+        System.assertEquals(false, result.isConfigured, 'Should not be configured with blank site ID');
+    }
+
+    /**
+     * Test getFullStatus - stored site ID no longer exists (graceful error)
+     */
+    @isTest
+    static void testGetFullStatusInvalidSiteId() {
+        reCAPTCHA_Settings__c settings = new reCAPTCHA_Settings__c(
+            SetupOwnerId = UserInfo.getOrganizationId(),
+            Default_Site_Id__c = '0DM000000000001',
+            Site_Key__c = 'TestKey',
+            Secret_Key__c = 'TestSecret'
+        );
+        insert settings;
+
+        Test.startTest();
+        SetupWizardController.FullStatusResult result = SetupWizardController.getFullStatus();
+        Test.stopTest();
+
+        System.assertEquals(false, result.isConfigured, 'Should set isConfigured=false when site not found');
+        System.assert(String.isNotBlank(result.errorMessage), 'Should have error message about deleted site');
+        System.assert(result.errorMessage.contains('not found') || result.errorMessage.contains('deleted'),
+            'Error should mention site not found or deleted');
+    }
+
+    /**
+     * Test getFullStatus - reCAPTCHA key masked to first 6 chars
+     */
+    @isTest
+    static void testGetFullStatusRecaptchaMasking() {
+        reCAPTCHA_Settings__c settings = new reCAPTCHA_Settings__c(
+            SetupOwnerId = UserInfo.getOrganizationId(),
+            Default_Site_Id__c = '0DM000000000001',
+            Site_Key__c = '6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI',
+            Secret_Key__c = '6LeIxAcTAAAAAGG-vFI1TnRWxMZNFuojJ4WifJWe',
+            Captcha_Type__c = 'V2_Checkbox'
+        );
+        insert settings;
+
+        Test.startTest();
+        SetupWizardController.FullStatusResult result = SetupWizardController.getFullStatus();
+        Test.stopTest();
+
+        // reCAPTCHA fields are populated before Site lookup, so masking is testable
+        // even though the method returns early due to fake Site ID
+        System.assertEquals('6LeIxA...', result.recaptchaSiteKeyMasked,
+            'Key should be masked to first 6 chars + ...');
+        System.assertEquals(true, result.recaptchaConfigured,
+            'reCAPTCHA should be marked as configured');
+        System.assertEquals('V2_Checkbox', result.recaptchaType,
+            'Captcha type should be V2_Checkbox');
+    }
+
+    /**
+     * Test getFullStatus - short reCAPTCHA site key (edge case)
+     */
+    @isTest
+    static void testGetFullStatusShortSiteKey() {
+        reCAPTCHA_Settings__c settings = new reCAPTCHA_Settings__c(
+            SetupOwnerId = UserInfo.getOrganizationId(),
+            Default_Site_Id__c = '0DM000000000001',
+            Site_Key__c = 'abc',
+            Secret_Key__c = 'TestSecret'
+        );
+        insert settings;
+
+        Test.startTest();
+        SetupWizardController.FullStatusResult result = SetupWizardController.getFullStatus();
+        Test.stopTest();
+
+        // reCAPTCHA fields are set before Site lookup — short key should not throw substring error
+        System.assertEquals('abc...', result.recaptchaSiteKeyMasked,
+            'Short key should get ... appended without substring error');
+        System.assertEquals(true, result.recaptchaConfigured,
+            'reCAPTCHA should be configured with both keys present');
+    }
+
+    /**
+     * Test getFullStatus - reCAPTCHA not configured (no keys)
+     */
+    @isTest
+    static void testGetFullStatusRecaptchaNotConfigured() {
+        reCAPTCHA_Settings__c settings = new reCAPTCHA_Settings__c(
+            SetupOwnerId = UserInfo.getOrganizationId(),
+            Default_Site_Id__c = '0DM000000000001'
+            // No Site_Key__c or Secret_Key__c
+        );
+        insert settings;
+
+        Test.startTest();
+        SetupWizardController.FullStatusResult result = SetupWizardController.getFullStatus();
+        Test.stopTest();
+
+        System.assertEquals(false, result.recaptchaConfigured, 'reCAPTCHA should not be configured without keys');
+        System.assertEquals(null, result.recaptchaSiteKeyMasked, 'Masked key should be null when no key set');
+    }
+
     /**
      * Test saveReCaptchaSettings - v2 Invisible type
      */

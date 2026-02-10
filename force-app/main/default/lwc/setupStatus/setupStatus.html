@@ -1,0 +1,176 @@
+<template>
+    <lightning-card title="Configuration Status" icon-name="standard:settings">
+        <!-- Refresh button in actions slot -->
+        <lightning-button
+            slot="actions"
+            label="Refresh"
+            icon-name="utility:refresh"
+            onclick={handleRefresh}
+            disabled={isLoading}
+        ></lightning-button>
+
+        <!-- Loading spinner -->
+        <template lwc:if={isLoading}>
+            <div class="slds-p-around_large slds-align_absolute-center">
+                <lightning-spinner alternative-text="Loading configuration status" size="medium"></lightning-spinner>
+            </div>
+        </template>
+
+        <template lwc:elseif={hasError}>
+            <!-- Error state -->
+            <div class="slds-p-around_medium">
+                <div class="slds-notify slds-notify_alert slds-alert_warning" role="alert">
+                    <lightning-icon icon-name="utility:warning" variant="warning" size="x-small" class="slds-m-right_x-small"></lightning-icon>
+                    <span>{displayError}</span>
+                </div>
+            </div>
+        </template>
+
+        <template lwc:elseif={isConfigured}>
+            <!-- Configured state: 2x2 grid -->
+            <div class="slds-p-around_medium">
+                <div class="slds-grid slds-wrap slds-gutters_small">
+
+                    <!-- Site Info -->
+                    <div class="slds-col slds-size_1-of-2 slds-p-bottom_small">
+                        <div class="status-box slds-box slds-box_x-small">
+                            <h3 class="slds-text-title_caps slds-m-bottom_x-small">Site</h3>
+                            <dl class="status-list">
+                                <div class="status-item">
+                                    <dt>Name</dt>
+                                    <dd>{status.siteName}</dd>
+                                </div>
+                                <div class="status-item">
+                                    <dt>Status</dt>
+                                    <dd>
+                                        <span class={siteStatusVariant}>
+                                            <lightning-badge label={siteStatusLabel}></lightning-badge>
+                                        </span>
+                                    </dd>
+                                </div>
+                                <template lwc:if={hasSiteBaseUrl}>
+                                    <div class="status-item">
+                                        <dt>Base URL</dt>
+                                        <dd class="url-text">{status.siteBaseUrl}</dd>
+                                    </div>
+                                </template>
+                            </dl>
+                        </div>
+                    </div>
+
+                    <!-- Permissions -->
+                    <div class="slds-col slds-size_1-of-2 slds-p-bottom_small">
+                        <div class="status-box slds-box slds-box_x-small">
+                            <h3 class="slds-text-title_caps slds-m-bottom_x-small">Guest User Permissions</h3>
+                            <div class="slds-grid slds-grid_vertical-align-center slds-m-bottom_x-small">
+                                <lightning-icon icon-name={permissionsIconName} variant={permissionsIconVariant} size="x-small" class="slds-m-right_x-small"></lightning-icon>
+                                <span class="slds-text-body_regular">{permissionsSummary}</span>
+                            </div>
+                            <template lwc:if={hasPermissions}>
+                                <lightning-button
+                                    variant="base"
+                                    label={toggleDetailsLabel}
+                                    onclick={togglePermissionDetails}
+                                    class="slds-text-body_small"
+                                ></lightning-button>
+                            </template>
+                        </div>
+                    </div>
+
+                    <!-- reCAPTCHA -->
+                    <div class="slds-col slds-size_1-of-2 slds-p-bottom_small">
+                        <div class="status-box slds-box slds-box_x-small">
+                            <h3 class="slds-text-title_caps slds-m-bottom_x-small">reCAPTCHA</h3>
+                            <dl class="status-list">
+                                <div class="status-item">
+                                    <dt>Status</dt>
+                                    <dd>{recaptchaStatusLabel}</dd>
+                                </div>
+                                <template lwc:if={status.recaptchaConfigured}>
+                                    <div class="status-item">
+                                        <dt>Type</dt>
+                                        <dd>{recaptchaTypeLabel}</dd>
+                                    </div>
+                                    <div class="status-item">
+                                        <dt>Site Key</dt>
+                                        <dd class="url-text">{status.recaptchaSiteKeyMasked}</dd>
+                                    </div>
+                                </template>
+                            </dl>
+                        </div>
+                    </div>
+
+                    <!-- Form URL -->
+                    <div class="slds-col slds-size_1-of-2 slds-p-bottom_small">
+                        <div class="status-box slds-box slds-box_x-small">
+                            <h3 class="slds-text-title_caps slds-m-bottom_x-small">Public Form URL</h3>
+                            <template lwc:if={hasPublicFormUrl}>
+                                <p class="url-text slds-m-bottom_x-small">{status.publicFormUrl}</p>
+                                <div class="slds-button-group" role="group">
+                                    <lightning-button
+                                        label={copyButtonLabel}
+                                        icon-name="utility:copy_to_clipboard"
+                                        onclick={handleCopyUrl}
+                                        variant="neutral"
+                                    ></lightning-button>
+                                    <lightning-button
+                                        label="Open"
+                                        icon-name="utility:new_window"
+                                        onclick={handleOpenUrl}
+                                        variant="neutral"
+                                    ></lightning-button>
+                                </div>
+                            </template>
+                            <template lwc:else>
+                                <p class="slds-text-color_weak">URL not available</p>
+                            </template>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Expandable permissions table -->
+                <template lwc:if={showPermissionDetails}>
+                    <div class="slds-m-top_small">
+                        <table class="slds-table slds-table_cell-buffer slds-table_bordered slds-table_striped">
+                            <thead>
+                                <tr class="slds-line-height_reset">
+                                    <th scope="col"><div class="slds-truncate">Permission</div></th>
+                                    <th scope="col"><div class="slds-truncate">Type</div></th>
+                                    <th scope="col"><div class="slds-truncate">Status</div></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <template for:each={permissionRows} for:item="row">
+                                    <tr key={row.key}>
+                                        <td><div class="slds-truncate">{row.name}</div></td>
+                                        <td><div class="slds-truncate">{row.permissionType}</div></td>
+                                        <td>
+                                            <div class="slds-grid slds-grid_vertical-align-center">
+                                                <lightning-icon icon-name={row.iconName} variant={row.iconVariant} size="xx-small" class="slds-m-right_xx-small"></lightning-icon>
+                                                <span class={row.statusClass}>{row.statusLabel}</span>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                </template>
+            </div>
+        </template>
+
+        <template lwc:else>
+            <!-- Not configured state -->
+            <div class="slds-p-around_medium">
+                <div class="slds-illustration slds-illustration_small">
+                    <div class="slds-text-longform">
+                        <h3 class="slds-text-heading_medium">Setup Not Complete</h3>
+                        <p class="slds-text-body_regular slds-m-top_x-small">
+                            Setup has not been completed yet. Run the wizard below to get started.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </template>
+    </lightning-card>
+</template>

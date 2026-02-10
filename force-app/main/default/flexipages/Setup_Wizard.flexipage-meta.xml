@@ -4,6 +4,12 @@
     <flexiPageRegions>
         <itemInstances>
             <componentInstance>
+                <componentName>c:setupStatus</componentName>
+                <identifier>setupStatus1</identifier>
+            </componentInstance>
+        </itemInstances>
+        <itemInstances>
+            <componentInstance>
                 <componentName>c:setupWizard</componentName>
                 <identifier>setupWizard1</identifier>
             </componentInstance>
