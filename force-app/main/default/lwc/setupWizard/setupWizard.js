@@ -1,5 +1,7 @@
-import { LightningElement, track } from 'lwc';
+import { LightningElement, track, wire } from 'lwc';
 import { ShowToastEvent } from 'lightning/platformShowToastEvent';
+import { publish, MessageContext } from 'lightning/messageService';
+import SETUP_STATUS_REFRESH from '@salesforce/messageChannel/SetupStatusRefresh__c';
 import checkPreconditions from '@salesforce/apex/SetupWizardController.checkPreconditions';
 import getActiveSites from '@salesforce/apex/SetupWizardController.getActiveSites';
 import getSetupStatus from '@salesforce/apex/SetupWizardController.getSetupStatus';
@@ -21,6 +23,8 @@ const STEPS = [
 ];
 
 export default class SetupWizard extends LightningElement {
+    @wire(MessageContext) messageContext;
+
     @track currentStep = '1';
     @track isLoading = true;
 
@@ -532,6 +536,7 @@ export default class SetupWizard extends LightningElement {
             // Moving from reCAPTCHA to Complete
             this.currentStep = '6';
             await this.loadPublicUrl();
+            publish(this.messageContext, SETUP_STATUS_REFRESH, {});
         }
     }
 

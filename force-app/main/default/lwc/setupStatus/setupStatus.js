@@ -1,4 +1,6 @@
-import { LightningElement, track } from 'lwc';
+import { LightningElement, track, wire } from 'lwc';
+import { subscribe, MessageContext } from 'lightning/messageService';
+import SETUP_STATUS_REFRESH from '@salesforce/messageChannel/SetupStatusRefresh__c';
 import getFullStatus from '@salesforce/apex/SetupWizardController.getFullStatus';
 
 const CAPTCHA_TYPE_LABELS = {
@@ -13,9 +15,19 @@ export default class SetupStatus extends LightningElement {
     showPermissionDetails = false;
     error;
     _copyLabel;
+    _subscription;
+
+    @wire(MessageContext) messageContext;
 
     connectedCallback() {
         this.loadStatus();
+        this._subscription = subscribe(this.messageContext, SETUP_STATUS_REFRESH, () => {
+            this.loadStatus();
+        });
+    }
+
+    get showCard() {
+        return this.isLoading || this.hasError || this.isConfigured;
     }
 
     loadStatus() {

@@ -61,12 +61,12 @@ The following reCAPTCHA items need manual verification before release:
 
 | | |
 |---|---|
-| **Version** | v0.6.1 |
+| **Version** | v0.6.2 |
 | **Phases Complete** | 0-4 (MVP, Admin UI, Setup Wizard, reCAPTCHA, Embeddable Widget) |
 | **Next Up** | Phase 5 (Multi-file upload, custom field types) |
 | **Dev Org** | `devorg` (tilman.dietrich@gmail.com.dev) |
 | **GitHub** | https://github.com/tilman-d/salesforce-webtocase |
-| **Last Change** | Configuration Status Dashboard + Setup Wizard UI fix |
+| **Last Change** | Configuration Status Dashboard: hide when unconfigured + auto-refresh via LMS |
 
 ---
 
@@ -181,12 +181,13 @@ Access via the **Setup Wizard** tab or the **Web-to-Case Forms** app in the App 
 
 ### LWC Components
 - **setupWizard** - Multi-step wizard with progress indicator
-- **setupStatus** - Configuration Status Dashboard (embedded in Setup Wizard page)
+- **setupStatus** - Configuration Status Dashboard (embedded in Setup Wizard page, hidden when unconfigured, auto-refreshes via LMS when wizard completes)
 
 ### Metadata
 - **Setup_Wizard.flexipage-meta.xml** - Lightning App Page
 - **Setup_Wizard.tab-meta.xml** - Navigation tab
 - **Web_to_Case_Forms.app-meta.xml** - Lightning App (consolidates all functionality)
+- **SetupStatusRefresh.messageChannel-meta.xml** - LMS channel for wizard→dashboard communication
 
 ### Permission Set Updates
 - Added SetupWizardController class access
@@ -709,11 +710,13 @@ force-app/main/default/
 │   ├── WebToCaseNonceService.cls        # Phase 4 - Nonce management
 │   ├── WebToCaseRateLimiter.cls         # Phase 4 - Rate limiting
 │   └── WebToCaseRestAPITest.cls         # Phase 4 - Tests
+├── messageChannels/
+│   └── SetupStatusRefresh.messageChannel-meta.xml  # LMS channel
 ├── lwc/
 │   ├── formAdminApp/                    # Phase 1 - Main admin container
 │   ├── formDetail/                      # Phase 1 - Form editor (+ CAPTCHA toggle)
-│   ├── setupStatus/                     # Configuration Status Dashboard
-│   └── setupWizard/                     # Phase 2 - Setup wizard
+│   ├── setupStatus/                     # Configuration Status Dashboard (+ LMS subscriber)
+│   └── setupWizard/                     # Phase 2 - Setup wizard (+ LMS publisher)
 ├── flexipages/
 │   ├── Form_Manager.flexipage-meta.xml  # Phase 1
 │   └── Setup_Wizard.flexipage-meta.xml  # Phase 2
@@ -769,6 +772,12 @@ force-app/main/default/
 ---
 
 ## Changelog
+
+### v0.6.2 (2026-02-10) - Configuration Status Dashboard: Hide When Unconfigured + Auto-Refresh
+- **setupStatus hidden when unconfigured**: Dashboard renders nothing when the org has no configuration, eliminating the redundant "Setup Not Complete" message
+- **Auto-refresh via LMS**: When the Setup Wizard completes (Step 6), `setupStatus` automatically refreshes and appears without a page reload
+- **New Lightning Message Channel**: `SetupStatusRefresh` for sibling component communication between `setupWizard` and `setupStatus`
+- **Immediate card display**: Card shows loading spinner immediately on page load (no 2-second lag on configured orgs)
 
 ### v0.6.1 (2026-02-10) - Configuration Status Dashboard + Setup Wizard UI Fix
 - **New LWC: `setupStatus`** - Configuration Status Dashboard showing real-time setup health
@@ -986,9 +995,14 @@ See the **🧪 MANUAL TESTING REQUIRED** section at the top of this README for t
 
 ## Next Session Starting Point
 
-**Status:** Phases 0-4 complete. v0.6.1 deployed. **Needs manual testing** — see top of README. Ready for Phase 5 after testing.
+**Status:** Phases 0-4 complete. v0.6.2 deployed. **Needs manual testing** — see top of README. Ready for Phase 5 after testing.
 
-**Recent changes (v0.6.1):**
+**Recent changes (v0.6.2):**
+- `setupStatus` hidden when unconfigured (no more "Setup Not Complete" card)
+- Auto-refresh via LMS when wizard reaches Step 6 — dashboard appears without page reload
+- New `SetupStatusRefresh` Lightning Message Channel for sibling component communication
+
+**Previous (v0.6.1):**
 - New `setupStatus` LWC: Configuration Status Dashboard embedded in Setup Wizard page
 - Setup Wizard progress indicator reverted to standard dot stepper (`type="base"`)
 
@@ -1133,6 +1147,11 @@ When creating the managed/unlocked package for AppExchange, include the followin
 | `WebToCaseRateLimiter` | Rate limiting logic (Phase 4) |
 | `WebToCaseRestAPITest` | Test class (Phase 4) |
 
+### Lightning Message Channels (1)
+| Channel | API Name | Description |
+|---------|----------|-------------|
+| Setup Status Refresh | `SetupStatusRefresh` | Notifies setupStatus to refresh after wizard completes |
+
 ### Lightning Web Components (4)
 | Component | Description |
 |-----------|-------------|
@@ -1254,6 +1273,10 @@ When creating the managed/unlocked package for AppExchange, include the followin
     <types>
         <members>Google_reCAPTCHA</members>
         <name>RemoteSiteSetting</name>
+    </types>
+    <types>
+        <members>SetupStatusRefresh</members>
+        <name>LightningMessageChannel</name>
     </types>
     <version>59.0</version>
 </Package>
