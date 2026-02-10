@@ -67,6 +67,12 @@
     overflow: visible !important;
 }
 
+/* Give Default Case Values dropdowns room to render without being clipped */
+.defaults-section {
+    overflow: visible;
+    padding-bottom: 10rem;
+}
+
 /* Embed code styles */
 .embed-code-box {
     background-color: #1e1e1e;

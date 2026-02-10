@@ -22,7 +22,7 @@
             <value>
                 <fullName>Textarea</fullName>
                 <default>false</default>
-                <label>Textarea</label>
+                <label>Text Area</label>
             </value>
             <value>
                 <fullName>Phone</fullName>

@@ -1128,26 +1128,27 @@
                 '}' +
 
                 '.wtc-container {' +
-                '  max-width: 100%;' +
+                '  max-width: var(--wtc-container-max-width, 100%);' +
+                '  padding: var(--wtc-container-padding, 0);' +
                 '}' +
 
                 '.wtc-title {' +
-                '  font-size: 1.5rem;' +
-                '  font-weight: 600;' +
-                '  margin: 0 0 8px 0;' +
+                '  font-size: var(--wtc-title-font-size, 1.5rem);' +
+                '  font-weight: var(--wtc-title-font-weight, 600);' +
+                '  margin: var(--wtc-title-margin, 0 0 8px 0);' +
                 '  color: var(--wtc-text-color);' +
                 '}' +
 
                 '.wtc-description {' +
-                '  font-size: 0.875rem;' +
-                '  color: #666;' +
+                '  font-size: var(--wtc-description-font-size, 0.875rem);' +
+                '  color: var(--wtc-description-color, #666);' +
                 '  margin: 0 0 24px 0;' +
                 '}' +
 
                 '.wtc-form {' +
                 '  display: flex;' +
                 '  flex-direction: column;' +
-                '  gap: 20px;' +
+                '  gap: var(--wtc-field-gap, 20px);' +
                 '}' +
 
                 '.wtc-field {' +
@@ -1156,10 +1157,10 @@
                 '}' +
 
                 '.wtc-field label {' +
-                '  font-size: 0.875rem;' +
-                '  font-weight: 500;' +
+                '  font-size: var(--wtc-label-font-size, 0.875rem);' +
+                '  font-weight: var(--wtc-label-font-weight, 500);' +
                 '  margin-bottom: 6px;' +
-                '  color: var(--wtc-text-color);' +
+                '  color: var(--wtc-label-color, var(--wtc-text-color));' +
                 '}' +
 
                 '.wtc-required {' +
@@ -1169,8 +1170,8 @@
 
                 '.wtc-input {' +
                 '  width: 100%;' +
-                '  padding: 10px 12px;' +
-                '  font-size: 1rem;' +
+                '  padding: var(--wtc-input-padding, 10px 12px);' +
+                '  font-size: var(--wtc-input-font-size, 1rem);' +
                 '  font-family: inherit;' +
                 '  color: var(--wtc-text-color);' +
                 '  background: var(--wtc-input-background);' +
@@ -1211,14 +1212,14 @@
 
                 '.wtc-submit {' +
                 '  width: 100%;' +
-                '  padding: 12px 24px;' +
-                '  font-size: 1rem;' +
+                '  padding: var(--wtc-submit-padding, 12px 24px);' +
+                '  font-size: var(--wtc-submit-font-size, 1rem);' +
                 '  font-weight: 600;' +
                 '  font-family: inherit;' +
-                '  color: #fff;' +
-                '  background: var(--wtc-primary-color);' +
+                '  color: var(--wtc-submit-color, #fff);' +
+                '  background: var(--wtc-submit-background, var(--wtc-primary-color));' +
                 '  border: none;' +
-                '  border-radius: var(--wtc-border-radius);' +
+                '  border-radius: var(--wtc-submit-border-radius, var(--wtc-border-radius));' +
                 '  cursor: pointer;' +
                 '  transition: background-color 0.2s, opacity 0.2s;' +
                 '}' +
@@ -1240,8 +1241,8 @@
                 '  padding: 12px 16px;' +
                 '  font-size: 0.875rem;' +
                 '  color: #721c24;' +
-                '  background: #f8d7da;' +
-                '  border: 1px solid #f5c6cb;' +
+                '  background: var(--wtc-error-background, #f8d7da);' +
+                '  border: var(--wtc-error-border, 1px solid #f5c6cb);' +
                 '  border-radius: var(--wtc-border-radius);' +
                 '}' +
 
@@ -1255,8 +1256,8 @@
                 '  padding: 24px;' +
                 '  text-align: center;' +
                 '  color: var(--wtc-success-color);' +
-                '  background: #d4edda;' +
-                '  border: 1px solid #c3e6cb;' +
+                '  background: var(--wtc-success-background, #d4edda);' +
+                '  border: var(--wtc-success-border, 1px solid #c3e6cb);' +
                 '  border-radius: var(--wtc-border-radius);' +
                 '}' +
 
@@ -1311,6 +1312,379 @@
                 '}' +
             '</style>';
         }
+    };
+
+    /**
+     * SubmissionMixin — shared methods used by both FormWidget and ConnectedForm.
+     * These are non-DOM-touching pipeline methods that both classes need.
+     */
+    var SubmissionMixin = {
+        fetchFormConfig:        FormWidget.prototype.fetchFormConfig,
+        processSubmission:      FormWidget.prototype.processSubmission,
+        submitForm:             FormWidget.prototype.submitForm,
+        submitFormThenUploadChunks: FormWidget.prototype.submitFormThenUploadChunks,
+        uploadFileInChunks:     FormWidget.prototype.uploadFileInChunks,
+        uploadChunkSequentially: FormWidget.prototype.uploadChunkSequentially,
+        pollUploadStatus:       FormWidget.prototype.pollUploadStatus,
+        compressImageIfNeeded:  FormWidget.prototype.compressImageIfNeeded,
+        readFileAsBase64:       FormWidget.prototype.readFileAsBase64,
+        arrayBufferToBase64:    FormWidget.prototype.arrayBufferToBase64,
+        generateUUID:           FormWidget.prototype.generateUUID,
+        isValidEmail:           FormWidget.prototype.isValidEmail,
+        isSupportedImage:       FormWidget.prototype.isSupportedImage,
+        validateFile:           FormWidget.prototype.validateFile,
+        escapeHtml:             FormWidget.prototype.escapeHtml,
+        getCaptchaToken:        FormWidget.prototype.getCaptchaToken,
+        resetCaptcha:           FormWidget.prototype.resetCaptcha,
+        refreshNonce:           FormWidget.prototype.refreshNonce,
+        loadImageCompression:   FormWidget.prototype.loadImageCompression,
+        loadCaptcha:            FormWidget.prototype.loadCaptcha,
+        renderCaptchaWidget:    FormWidget.prototype.renderCaptchaWidget
+    };
+
+    /**
+     * ConnectedForm — binds submission logic to user's own HTML form.
+     * No Shadow DOM, no rendered HTML. The user provides the form markup.
+     *
+     * @param {Object} options
+     * @param {string} options.formName - Form name/identifier
+     * @param {string} options.formSelector - CSS selector for the user's <form>
+     * @param {string} options.apiBase - Base URL for REST API
+     * @param {string} [options.fileInputSelector] - CSS selector for file <input>
+     * @param {string} [options.captchaContainerId] - ID of element to render CAPTCHA into
+     * @param {string} [options.errorContainerId] - ID of element for error messages
+     * @param {string} [options.successContainerId] - ID of element for success state
+     * @param {Function} [options.onSuccess] - Success callback (receives caseNumber)
+     * @param {Function} [options.onError] - Error callback (receives error message)
+     * @param {Function} [options.onLoad] - Called when form config is loaded
+     */
+    function ConnectedForm(options) {
+        this.options = options;
+        this.formConfig = null;
+        this.formEl = null;
+        this.fileInputEl = null;
+        this.errorEl = null;
+        this.successEl = null;
+        this.captchaWidgetId = null;
+        this.captchaResolve = null;
+        this.captchaLightContainer = null;
+        this.imageCompression = null;
+        this._submitHandler = null;
+    }
+
+    ConnectedForm.prototype = {
+        /**
+         * Initialize: resolve DOM, fetch config, attach listeners, load deps
+         */
+        init: function() {
+            var self = this;
+
+            // Resolve DOM elements
+            this.formEl = document.querySelector(this.options.formSelector);
+            if (!this.formEl) {
+                console.error('WebToCaseForm.connect: Form not found:', this.options.formSelector);
+                return;
+            }
+
+            if (this.options.fileInputSelector) {
+                this.fileInputEl = document.querySelector(this.options.fileInputSelector);
+            }
+            if (this.options.errorContainerId) {
+                this.errorEl = document.getElementById(this.options.errorContainerId);
+            }
+            if (this.options.successContainerId) {
+                this.successEl = document.getElementById(this.options.successContainerId);
+            }
+            if (this.options.captchaContainerId) {
+                this.captchaLightContainer = document.getElementById(this.options.captchaContainerId);
+            }
+
+            // Fetch form config
+            this.fetchFormConfig()
+                .then(function(config) {
+                    self.formConfig = config;
+                    self._warnMissingFields(config);
+                    self._attachSubmitHandler();
+                    self._loadDependencies();
+                    if (self.options.onLoad) {
+                        self.options.onLoad();
+                    }
+                })
+                .catch(function(error) {
+                    var msg = 'Failed to load form: ' + error;
+                    console.error('WebToCaseForm.connect:', msg);
+                    self.showFormError(msg);
+                    if (self.options.onError) {
+                        self.options.onError(msg);
+                    }
+                });
+        },
+
+        /**
+         * Warn about missing fields in the user's HTML
+         */
+        _warnMissingFields: function(config) {
+            if (!config.fields || !this.formEl) return;
+            for (var i = 0; i < config.fields.length; i++) {
+                var field = config.fields[i];
+                var input = this.formEl.querySelector('[name="' + field.caseField + '"]');
+                if (!input) {
+                    console.warn(
+                        'WebToCaseForm.connect: No input found for required field "' +
+                        field.caseField + '" (label: "' + field.label + '"). ' +
+                        'Add an input with name="' + field.caseField + '" to your form.'
+                    );
+                }
+            }
+        },
+
+        /**
+         * Attach submit handler to user's form
+         */
+        _attachSubmitHandler: function() {
+            var self = this;
+            this._submitHandler = function(e) {
+                e.preventDefault();
+                self.handleSubmit();
+            };
+            this.formEl.addEventListener('submit', this._submitHandler);
+        },
+
+        /**
+         * Load dependencies (image compression, CAPTCHA)
+         */
+        _loadDependencies: function() {
+            if (this.formConfig.enableFileUpload) {
+                this.loadImageCompression();
+            }
+            if (this.formConfig.enableCaptcha && this.formConfig.captchaSiteKey) {
+                this.loadCaptcha();
+            }
+        },
+
+        /**
+         * Handle form submission
+         */
+        handleSubmit: function() {
+            var self = this;
+            var config = this.formConfig;
+
+            // Validate form
+            var errors = this.validateForm();
+            if (errors.length > 0) {
+                this.showFormError(errors.join('<br>'));
+                return;
+            }
+
+            // Validate CAPTCHA (v2 checkbox)
+            var captchaType = config.captchaType || 'V2_Checkbox';
+            if (config.enableCaptcha && captchaType === 'V2_Checkbox') {
+                if (typeof grecaptcha !== 'undefined' && this.captchaWidgetId !== null) {
+                    var token = grecaptcha.getResponse(this.captchaWidgetId);
+                    if (!token) {
+                        this.showFormError('Please complete the verification.');
+                        return;
+                    }
+                }
+            }
+
+            // Collect field values
+            var fieldValues = this.collectFieldValues();
+
+            // Get file
+            var file = null;
+            if (this.fileInputEl && this.fileInputEl.files && this.fileInputEl.files.length > 0) {
+                file = this.fileInputEl.files[0];
+            }
+
+            // Validate file
+            if (file) {
+                var fileValidation = this.validateFile(file);
+                if (!fileValidation.valid) {
+                    this.showFormError(fileValidation.error);
+                    return;
+                }
+            }
+
+            this.setLoading(true);
+
+            // Get CAPTCHA token and submit
+            this.getCaptchaToken()
+                .then(function(captchaToken) {
+                    if (config.enableCaptcha && captchaType === 'V2_Invisible' && !captchaToken) {
+                        self.setLoading(false);
+                        self.showFormError('Verification failed. Please try again.');
+                        return;
+                    }
+                    self.processSubmission(fieldValues, file, captchaToken);
+                })
+                .catch(function(err) {
+                    self.setLoading(false);
+                    self.showFormError('Verification error. Please try again.');
+                    console.error('WebToCaseForm: CAPTCHA error:', err);
+                });
+        },
+
+        /**
+         * Validate form fields using form config + user's DOM
+         */
+        validateForm: function() {
+            var errors = [];
+            var config = this.formConfig;
+            if (!config.fields) return errors;
+
+            for (var i = 0; i < config.fields.length; i++) {
+                var field = config.fields[i];
+                if (!field.required) continue;
+
+                var input = this.formEl.querySelector('[name="' + field.caseField + '"]');
+                if (!input) continue;
+
+                var value = input.value.trim();
+
+                if (!value) {
+                    errors.push(field.label + ' is required.');
+                    input.setAttribute('aria-invalid', 'true');
+                } else if (field.type === 'Email' && !this.isValidEmail(value)) {
+                    errors.push('Please enter a valid email address.');
+                    input.setAttribute('aria-invalid', 'true');
+                } else {
+                    input.removeAttribute('aria-invalid');
+                }
+            }
+
+            return errors;
+        },
+
+        /**
+         * Collect field values from user's form (only fields defined in config)
+         */
+        collectFieldValues: function() {
+            var values = {};
+            var config = this.formConfig;
+            if (!config.fields) return values;
+
+            for (var i = 0; i < config.fields.length; i++) {
+                var field = config.fields[i];
+                var input = this.formEl.querySelector('[name="' + field.caseField + '"]');
+                if (input) {
+                    values[field.caseField] = input.value.trim();
+                }
+            }
+
+            return values;
+        },
+
+        /**
+         * Set loading state on submit button
+         */
+        setLoading: function(loading) {
+            var button = this.formEl.querySelector('[type="submit"]');
+            if (button) {
+                button.disabled = loading;
+                if (loading) {
+                    button.setAttribute('data-original-text', button.textContent);
+                    button.textContent = 'Submitting...';
+                } else {
+                    var originalText = button.getAttribute('data-original-text');
+                    if (originalText) {
+                        button.textContent = originalText;
+                    }
+                }
+            }
+        },
+
+        /**
+         * Update button text (for progress updates)
+         */
+        updateButtonText: function(text) {
+            var button = this.formEl.querySelector('[type="submit"]');
+            if (button) {
+                button.textContent = text;
+            }
+        },
+
+        /**
+         * Show error message (DOM only — mixin code calls onError separately)
+         */
+        showFormError: function(message) {
+            if (this.errorEl) {
+                this.errorEl.innerHTML = message;
+                this.errorEl.hidden = false;
+            }
+        },
+
+        /**
+         * Hide error message
+         */
+        hideError: function() {
+            if (this.errorEl) {
+                this.errorEl.hidden = true;
+            }
+        },
+
+        /**
+         * Show success state — hide form, show success container, fill case number
+         */
+        showSuccess: function(caseNumber) {
+            if (this.formEl) {
+                this.formEl.hidden = true;
+            }
+            if (this.successEl) {
+                this.successEl.hidden = false;
+                var caseSpan = this.successEl.querySelector('[data-wtc-case-number]');
+                if (caseSpan) {
+                    caseSpan.textContent = caseNumber;
+                }
+            }
+            if (this.captchaLightContainer) {
+                this.captchaLightContainer.style.display = 'none';
+            }
+            this.hideError();
+        },
+
+        /**
+         * No-op stubs for methods called by mixin that are Shadow-DOM-specific
+         */
+        showCaptchaError: function() {},
+        hideCaptchaError: function() {},
+
+        /**
+         * Clean up — remove listener, CAPTCHA script
+         */
+        destroy: function() {
+            if (this.formEl && this._submitHandler) {
+                this.formEl.removeEventListener('submit', this._submitHandler);
+                this._submitHandler = null;
+            }
+            // Clean up CAPTCHA globals
+            if (window.wtcCaptchaOnload) {
+                delete window.wtcCaptchaOnload;
+            }
+            if (window.wtcCaptchaSuccess) {
+                delete window.wtcCaptchaSuccess;
+            }
+        }
+    };
+
+    // Copy mixin methods onto ConnectedForm prototype (skip already-defined)
+    for (var key in SubmissionMixin) {
+        if (SubmissionMixin.hasOwnProperty(key) && !ConnectedForm.prototype.hasOwnProperty(key)) {
+            ConnectedForm.prototype[key] = SubmissionMixin[key];
+        }
+    }
+
+    /**
+     * Connect mode — bind submission logic to user's own HTML form
+     */
+    WebToCaseForm.connect = function(options) {
+        if (!options || !options.formName || !options.formSelector || !options.apiBase) {
+            console.error('WebToCaseForm.connect: Missing required options (formName, formSelector, apiBase)');
+            return null;
+        }
+        var instance = new ConnectedForm(options);
+        instance.init();
+        return instance;
     };
 
     // Export to global scope

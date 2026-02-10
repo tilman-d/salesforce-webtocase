@@ -4,9 +4,43 @@ A Salesforce app that lets you create public web forms that submit Cases with fi
 
 ---
 
-## TODO: Verify Next Session
+## 🧪 MANUAL TESTING REQUIRED: Custom HTML Connect Mode + Extended CSS Variables (v0.6.0)
 
-- [ ] **Check Form Manager UI**: Confirm "Documents: up to 4MB" displays correctly (was showing cached "2MB" — org metadata verified correct, likely Salesforce LWC cache)
+The following items need manual verification in the dev org:
+
+### Connect Mode (`WebToCaseForm.connect()`)
+- [ ] Create a standalone HTML page with a custom form layout
+- [ ] Include the widget script and call `WebToCaseForm.connect()` with correct apiBase/formName
+- [ ] Verify form submission creates a Case with correct field values
+- [ ] Verify file upload works via `fileInputSelector` option
+- [ ] Verify CAPTCHA renders in the user-provided container (if enabled)
+- [ ] Verify validation errors appear in the user's error container and use `aria-invalid`
+- [ ] Verify success state hides the form and shows the success container with case number in `[data-wtc-case-number]`
+- [ ] Verify `destroy()` cleans up event listeners (test re-initialization in SPA-like scenario)
+- [ ] Verify console warnings appear for missing `name` attributes on required fields
+
+### Extended CSS Variables (Widget Mode)
+- [ ] Embed the widget on a test page and set `--wtc-container-max-width`, `--wtc-container-padding` — verify they take effect
+- [ ] Test title variables: `--wtc-title-font-size`, `--wtc-title-font-weight`, `--wtc-title-margin`
+- [ ] Test description variables: `--wtc-description-color`, `--wtc-description-font-size`
+- [ ] Test label variables: `--wtc-label-font-size`, `--wtc-label-font-weight`, `--wtc-label-color`
+- [ ] Test input variables: `--wtc-input-padding`, `--wtc-input-font-size`
+- [ ] Test field gap: `--wtc-field-gap`
+- [ ] Test submit button: `--wtc-submit-color`, `--wtc-submit-background`, `--wtc-submit-padding`, `--wtc-submit-font-size`, `--wtc-submit-border-radius`
+- [ ] Test success/error: `--wtc-success-background`, `--wtc-success-border`, `--wtc-error-background`, `--wtc-error-border`
+
+### Admin UI (Embed Code Section)
+- [ ] Verify scoped tabs (Widget / Custom HTML / iframe) render with light blue active background
+- [ ] Verify "Generate Embed Code" button is required before tabs appear
+- [ ] Verify tabs show immediately when loading a saved form with existing allowed domains
+- [ ] Verify Custom HTML tab generates correct HTML snippet with actual form fields
+- [ ] Verify Custom HTML tab generates correct CSS snippet scoped to form ID
+- [ ] Verify Custom HTML tab generates correct JS snippet with `connect()` call
+- [ ] Verify all Copy buttons work in all three tabs
+
+### Regression
+- [ ] Verify existing `WebToCaseForm.render()` widget still works identically after the mixin refactor
+- [ ] Verify iframe embed still works
 
 ---
 
@@ -27,12 +61,12 @@ The following reCAPTCHA items need manual verification before release:
 
 | | |
 |---|---|
-| **Version** | v0.5.2 |
+| **Version** | v0.6.0 |
 | **Phases Complete** | 0-4 (MVP, Admin UI, Setup Wizard, reCAPTCHA, Embeddable Widget) |
 | **Next Up** | Phase 5 (Multi-file upload, custom field types) |
 | **Dev Org** | `devorg` (tilman.dietrich@gmail.com.dev) |
 | **GitHub** | https://github.com/tilman-d/salesforce-webtocase |
-| **Last Change** | Default Case Values for Form Admin |
+| **Last Change** | Custom HTML Connect Mode + Extended CSS Variables |
 
 ---
 
@@ -205,14 +239,23 @@ Protects public forms from spam and bot submissions with "I'm not a robot" check
 ### Embeddable Widget for External Websites
 Allows users to embed Web-to-Case forms on external websites using a `<script>` tag.
 
-**Two Embed Modes:**
+**Three Embed Modes:**
 
 #### Mode 1: Inline Widget (Recommended)
 - Uses Shadow DOM for CSS isolation
-- Customizable via CSS variables
+- Customizable via 28 CSS variables (container, title, description, labels, inputs, submit button, success/error)
 - Form rendered directly in the host page
 
-#### Mode 2: iframe Embed
+#### Mode 2: Custom HTML Connect Mode
+- `WebToCaseForm.connect()` binds submission logic to user's own HTML form
+- No Shadow DOM, no rendered HTML — full design control
+- Validates against form config using `aria-invalid` attributes
+- Collects only config-defined fields by `name` attribute
+- Supports file upload, CAPTCHA, chunked uploads, and all existing features
+- `destroy()` method for SPA re-initialization
+- Init-time console warnings for missing required field inputs
+
+#### Mode 3: iframe Embed
 - Full DOM isolation
 - Automatic height resizing via postMessage
 - Best for sites with strict CSP policies
@@ -251,23 +294,57 @@ Allows users to embed Web-to-Case forms on external websites using a `<script>` 
 
 ### Admin UI Updates
 - **Embed Code section** in Form Detail with:
-  - Allowed Domains textarea
-  - Auto-generated embed code snippets
-  - Copy buttons for code
-  - reCAPTCHA domain warning
+  - Allowed Domains textarea with "Generate Embed Code" confirmation button
+  - SLDS scoped tabs: **Widget** | **Custom HTML** | **iframe**
+  - Widget tab: Inline script snippet + CSS variables snippet
+  - Custom HTML tab: Generated HTML/CSS/JS snippets from actual form fields
+  - iframe tab: iframe embed snippet
+  - Copy buttons for all code snippets
+  - reCAPTCHA domain warning (above tabs, applies to all methods)
 
-### CSS Variables for Styling
+### CSS Variables for Styling (28 variables)
 
 ```css
 #support-form {
+  /* Base */
   --wtc-primary-color: #0176d3;
-  --wtc-font-family: system-ui, sans-serif;
-  --wtc-border-radius: 4px;
-  --wtc-input-border: 1px solid #c9c9c9;
-  --wtc-input-background: #ffffff;
+  --wtc-font-family: system-ui, -apple-system, sans-serif;
   --wtc-text-color: #181818;
+  --wtc-border-radius: 4px;
   --wtc-error-color: #c23934;
   --wtc-success-color: #2e844a;
+  /* Container */
+  --wtc-container-max-width: 100%;
+  --wtc-container-padding: 0;
+  /* Title */
+  --wtc-title-font-size: 1.5rem;
+  --wtc-title-font-weight: 600;
+  --wtc-title-margin: 0 0 8px 0;
+  /* Description */
+  --wtc-description-color: #666;
+  --wtc-description-font-size: 0.875rem;
+  /* Labels */
+  --wtc-label-font-size: 0.875rem;
+  --wtc-label-font-weight: 500;
+  --wtc-label-color: var(--wtc-text-color);
+  /* Inputs */
+  --wtc-input-border: 1px solid #c9c9c9;
+  --wtc-input-background: #ffffff;
+  --wtc-input-padding: 10px 12px;
+  --wtc-input-font-size: 1rem;
+  /* Field layout */
+  --wtc-field-gap: 20px;
+  /* Submit button */
+  --wtc-submit-color: #fff;
+  --wtc-submit-background: var(--wtc-primary-color);
+  --wtc-submit-padding: 12px 24px;
+  --wtc-submit-font-size: 1rem;
+  --wtc-submit-border-radius: var(--wtc-border-radius);
+  /* Success/Error */
+  --wtc-success-background: #d4edda;
+  --wtc-success-border: 1px solid #c3e6cb;
+  --wtc-error-background: #f8d7da;
+  --wtc-error-border: 1px solid #f5c6cb;
 }
 ```
 
@@ -302,6 +379,57 @@ Allows users to embed Web-to-Case forms on external websites using a `<script>` 
   });
 </script>
 ```
+
+### Custom HTML (Connect Mode)
+
+Use `WebToCaseForm.connect()` for full control over form HTML and styling:
+
+```html
+<form id="wtc-support">
+  <div>
+    <label for="SuppliedName">Your Name *</label>
+    <input type="text" id="SuppliedName" name="SuppliedName" required />
+  </div>
+  <div>
+    <label for="SuppliedEmail">Email *</label>
+    <input type="email" id="SuppliedEmail" name="SuppliedEmail" required />
+  </div>
+  <div>
+    <label for="Subject">Subject *</label>
+    <input type="text" id="Subject" name="Subject" required />
+  </div>
+  <div>
+    <label for="Description">Message *</label>
+    <textarea id="Description" name="Description" required></textarea>
+  </div>
+  <div id="wtc-error" hidden></div>
+  <button type="submit">Submit</button>
+</form>
+
+<div id="wtc-success" hidden>
+  <p>Your request has been submitted successfully.</p>
+  <p>Reference: <span data-wtc-case-number></span></p>
+</div>
+
+<script src="https://yoursite.salesforce-sites.com/support/resource/caseFormWidget"></script>
+<script>
+  WebToCaseForm.connect({
+    formName: 'support',
+    formSelector: '#wtc-support',
+    apiBase: 'https://yoursite.salesforce-sites.com/support/services/apexrest',
+    errorContainerId: 'wtc-error',
+    successContainerId: 'wtc-success',
+    onSuccess: function(caseNumber) {
+      console.log('Case created:', caseNumber);
+    },
+    onError: function(error) {
+      console.error('Error:', error);
+    }
+  });
+</script>
+```
+
+Input `name` attributes must match Case field API names from your form config. You can rearrange elements, add classes, and style freely — the script only touches elements it needs.
 
 ### iframe Alternative
 
@@ -640,6 +768,23 @@ force-app/main/default/
 
 ## Changelog
 
+### v0.6.0 (2026-02-10) - Custom HTML Connect Mode + Extended CSS Variables
+- **Connect mode** (`WebToCaseForm.connect()`): Bind submission logic to user's own HTML form — no Shadow DOM, full design control
+  - Validates against form config using `aria-invalid` attributes
+  - Collects only config-defined fields by `name` attribute
+  - Supports file upload, CAPTCHA, chunked uploads, polling — all existing features
+  - `destroy()` method for clean SPA re-initialization
+  - Init-time console warnings for missing required field inputs
+- **Extended CSS variables**: Expanded from 8 to 28 variables covering container, title, description, labels, inputs, field gap, submit button, success, and error styling
+- **SubmissionMixin**: Internal refactor extracting shared submission-pipeline methods from FormWidget — no behavior change, enables code reuse by ConnectedForm
+- **Admin UI: Embed Code section redesigned**:
+  - SLDS scoped tabs (Widget / Custom HTML / iframe) replacing sequential layout
+  - "Generate Embed Code" button — domains must be confirmed before snippets appear
+  - Custom HTML tab generates HTML, CSS, and JS snippets from the form's actual fields
+  - All tabs have Copy buttons for each snippet
+- **Updated files**: `caseFormWidget.js` (CSS variables, SubmissionMixin, ConnectedForm, `connect()`), `formDetail.js/html/css` (snippets, handlers, scoped tabs)
+- No backend (Apex) changes — connect mode uses the same REST endpoints
+
 ### v0.5.2 (2026-02-09) - Default Case Values for Form Admin
 - **Default Case Values**: Admins can configure hidden Case field defaults per form (e.g., Priority=High, Type=Problem)
 - **JSON storage**: Defaults stored as JSON on `Form__c.Default_Case_Values__c` (LongTextArea)
@@ -830,15 +975,17 @@ See the **🧪 MANUAL TESTING REQUIRED** section at the top of this README for t
 
 ## Next Session Starting Point
 
-**Status:** Phases 0-4 complete. v0.5.2 (Default Case Values) deployed and tested. Ready for Phase 5 (multi-file upload, custom field types).
+**Status:** Phases 0-4 complete. v0.6.0 (Custom HTML Connect Mode + Extended CSS Variables) deployed. **Needs manual testing** — see top of README. Ready for Phase 5 after testing.
 
-**Recent changes (v0.5.2):**
-- Default Case Values feature: admins can set hidden Case field defaults per form (Priority, Status, Origin, Type, Reason)
-- JSON stored on `Form__c.Default_Case_Values__c`, validated at config-time, applied at submit-time with DML retry
-- New `CaseDefaultFieldConfig` utility class, new LWC accordion section with picklist-aware UI
-- 12 new test methods across both test classes
-- All 204 Apex unit tests passing, 11/11 e2e backend tests passing
-- Deployed to devorg (66/66 components)
+**Recent changes (v0.6.0):**
+- Custom HTML connect mode: `WebToCaseForm.connect()` for full design control (no Shadow DOM)
+- Extended CSS variables: 28 variables for comprehensive widget theming
+- SubmissionMixin: internal refactor for code reuse between FormWidget and ConnectedForm
+- Admin UI: Embed Code section redesigned with scoped tabs (Widget / Custom HTML / iframe)
+- "Generate Embed Code" confirmation button prevents premature code generation
+- Custom HTML tab generates HTML/CSS/JS snippets from actual form fields
+- No backend changes — uses same REST endpoints
+- Deployed to devorg
 
 **File size limits (fixed):**
 | File Type | Limit | Behavior |

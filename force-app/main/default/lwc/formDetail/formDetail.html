@@ -115,7 +115,7 @@
                             </lightning-input>
                             <template if:true={form.enableFileUpload}>
                                 <p class="slds-text-color_weak slds-text-body_small slds-m-top_x-small">
-                                    Images: up to 25MB (auto-compressed) | Documents: up to 4MB
+                                    Images: Up to 25MB (auto-compressed) | Other Files: Up to 4MB
                                 </p>
                             </template>
                         </div>
@@ -326,73 +326,75 @@
 
                 <!-- Default Case Values Section -->
                 <lightning-accordion-section name="defaults" label="Default Case Values">
-                    <p class="slds-text-color_weak slds-text-body_small slds-m-bottom_small">
-                        Set default values for hidden Case fields. These are applied automatically when a case is created from this form.
-                        Note: If a picklist value becomes invalid, the system will still create the case without defaults.
-                    </p>
+                    <div class="defaults-section">
+                        <p class="slds-text-color_weak slds-text-body_small slds-m-bottom_small">
+                            Set default values for hidden Case fields. These are applied automatically when a case is created from this form.
+                            Note: If a picklist value becomes invalid, the system will still create the case without defaults.
+                        </p>
 
-                    <div class="slds-m-bottom_small">
-                        <lightning-button
-                            label="Add Default Value"
-                            variant="neutral"
-                            icon-name="utility:add"
-                            onclick={handleAddDefault}
-                            disabled={cannotAddDefault}>
-                        </lightning-button>
-                    </div>
-
-                    <template if:false={hasDefaultValues}>
-                        <div class="slds-illustration slds-illustration_small slds-p-around_medium slds-text-align_center">
-                            <p class="slds-text-body_regular">No default values configured. Click "Add Default Value" to set hidden Case field defaults.</p>
+                        <div class="slds-m-bottom_small">
+                            <lightning-button
+                                label="Add Default Value"
+                                variant="neutral"
+                                icon-name="utility:add"
+                                onclick={handleAddDefault}
+                                disabled={cannotAddDefault}>
+                            </lightning-button>
                         </div>
-                    </template>
 
-                    <template if:true={hasDefaultValues}>
-                        <template for:each={defaultValuesWithIndex} for:item="dv">
-                            <div key={dv.tempId} class="slds-grid slds-gutters slds-grid_vertical-align-end slds-m-bottom_small">
-                                <div class="slds-col slds-size_5-of-12">
-                                    <lightning-combobox
-                                        label="Case Field"
-                                        value={dv.fieldName}
-                                        options={dv.fieldOptions}
-                                        data-index={dv.index}
-                                        onchange={handleDefaultFieldChange}
-                                        placeholder="Select a field">
-                                    </lightning-combobox>
-                                </div>
-                                <div class="slds-col slds-size_5-of-12">
-                                    <template if:true={dv.isPicklist}>
-                                        <lightning-combobox
-                                            label="Value"
-                                            value={dv.value}
-                                            options={dv.picklistOptions}
-                                            data-index={dv.index}
-                                            onchange={handleDefaultValueChange}
-                                            placeholder="Select a value">
-                                        </lightning-combobox>
-                                    </template>
-                                    <template if:false={dv.isPicklist}>
-                                        <lightning-input
-                                            label="Value"
-                                            value={dv.value}
-                                            data-index={dv.index}
-                                            onchange={handleDefaultValueChange}
-                                            placeholder="Enter value">
-                                        </lightning-input>
-                                    </template>
-                                </div>
-                                <div class="slds-col slds-size_2-of-12">
-                                    <lightning-button-icon
-                                        icon-name="utility:delete"
-                                        alternative-text="Remove"
-                                        variant="destructive"
-                                        data-index={dv.index}
-                                        onclick={handleRemoveDefault}>
-                                    </lightning-button-icon>
-                                </div>
+                        <template if:false={hasDefaultValues}>
+                            <div class="slds-illustration slds-illustration_small slds-p-around_medium slds-text-align_center">
+                                <p class="slds-text-body_regular">No default values configured. Click "Add Default Value" to set hidden Case field defaults.</p>
                             </div>
                         </template>
-                    </template>
+
+                        <template if:true={hasDefaultValues}>
+                            <template for:each={defaultValuesWithIndex} for:item="dv">
+                                <div key={dv.tempId} class="slds-grid slds-gutters slds-grid_vertical-align-end slds-m-bottom_small">
+                                    <div class="slds-col slds-size_5-of-12">
+                                        <lightning-combobox
+                                            label="Case Field"
+                                            value={dv.fieldName}
+                                            options={dv.fieldOptions}
+                                            data-index={dv.index}
+                                            onchange={handleDefaultFieldChange}
+                                            placeholder="Select a field">
+                                        </lightning-combobox>
+                                    </div>
+                                    <div class="slds-col slds-size_5-of-12">
+                                        <template if:true={dv.isPicklist}>
+                                            <lightning-combobox
+                                                label="Value"
+                                                value={dv.value}
+                                                options={dv.picklistOptions}
+                                                data-index={dv.index}
+                                                onchange={handleDefaultValueChange}
+                                                placeholder="Select a value">
+                                            </lightning-combobox>
+                                        </template>
+                                        <template if:false={dv.isPicklist}>
+                                            <lightning-input
+                                                label="Value"
+                                                value={dv.value}
+                                                data-index={dv.index}
+                                                onchange={handleDefaultValueChange}
+                                                placeholder="Enter value">
+                                            </lightning-input>
+                                        </template>
+                                    </div>
+                                    <div class="slds-col slds-size_2-of-12">
+                                        <lightning-button-icon
+                                            icon-name="utility:delete"
+                                            alternative-text="Remove"
+                                            variant="destructive"
+                                            data-index={dv.index}
+                                            onclick={handleRemoveDefault}>
+                                        </lightning-button-icon>
+                                    </div>
+                                </div>
+                            </template>
+                        </template>
+                    </div>
                 </lightning-accordion-section>
 
                 <!-- Embed Code Section -->
@@ -404,96 +406,189 @@
                     </template>
 
                     <template if:false={isNewForm}>
-                        <div class="slds-grid slds-wrap slds-gutters">
-                            <!-- Allowed Domains -->
-                            <div class="slds-col slds-size_1-of-1 slds-p-bottom_medium">
-                                <lightning-textarea
-                                    label="Allowed Domains (one per line)"
-                                    value={form.allowedDomains}
-                                    onchange={handleAllowedDomainsChange}
-                                    placeholder="example.com&#10;mysite.org"
-                                    field-level-help="Enter domain names that are allowed to embed this form. Leave empty to disable external embedding.">
-                                </lightning-textarea>
-                                <p class="slds-text-color_weak slds-text-body_small slds-m-top_x-small">
-                                    Enter only the domain (e.g., example.com), not the full URL. One domain per line.
-                                </p>
+                        <!-- Allowed Domains (applies to all embed methods) -->
+                        <div class="slds-p-bottom_medium">
+                            <lightning-textarea
+                                label="Allowed Domains (one per line)"
+                                value={form.allowedDomains}
+                                onchange={handleAllowedDomainsChange}
+                                placeholder="example.com&#10;mysite.org"
+                                field-level-help="Enter domain names that are allowed to embed this form. Leave empty to disable external embedding.">
+                            </lightning-textarea>
+                            <p class="slds-text-color_weak slds-text-body_small slds-m-top_x-small">
+                                Enter only the domain (e.g., example.com), not the full URL. One domain per line.
+                            </p>
+                            <div class="slds-m-top_small">
+                                <lightning-button
+                                    label="Generate Embed Code"
+                                    variant="brand"
+                                    icon-name="utility:preview"
+                                    onclick={handleConfirmDomains}
+                                    disabled={confirmDomainsDisabled}>
+                                </lightning-button>
                             </div>
+                        </div>
 
-                            <template if:true={hasAllowedDomains}>
-                                <!-- Inline Widget Code -->
-                                <div class="slds-col slds-size_1-of-1 slds-p-bottom_medium">
-                                    <div class="slds-text-title_bold slds-m-bottom_x-small">1. Add this script to your website:</div>
-                                    <div class="slds-box slds-box_x-small slds-theme_shade embed-code-box">
-                                        <pre class="embed-code">{embedScriptSnippet}</pre>
+                        <!-- reCAPTCHA Warning (applies to all embed methods) -->
+                        <template if:true={form.enableCaptcha}>
+                            <div class="slds-p-bottom_medium">
+                                <div class="slds-scoped-notification slds-media slds-media_center slds-theme_warning" role="status">
+                                    <div class="slds-media__figure">
+                                        <lightning-icon icon-name="utility:warning" size="small"></lightning-icon>
                                     </div>
-                                    <div class="slds-m-top_x-small">
-                                        <lightning-button
-                                            label="Copy Code"
-                                            icon-name="utility:copy"
-                                            onclick={handleCopyScriptCode}>
-                                        </lightning-button>
+                                    <div class="slds-media__body">
+                                        <p>
+                                            <strong>reCAPTCHA Setup Required:</strong> Add your embedding domain to your
+                                            <a href="https://www.google.com/recaptcha/admin" target="_blank" rel="noopener">Google reCAPTCHA allowed domains list</a>.
+                                        </p>
                                     </div>
                                 </div>
+                            </div>
+                        </template>
 
-                                <!-- Styling Code -->
-                                <div class="slds-col slds-size_1-of-1 slds-p-bottom_medium">
-                                    <div class="slds-text-title_bold slds-m-bottom_x-small">2. (Optional) Customize styling:</div>
-                                    <div class="slds-box slds-box_x-small slds-theme_shade embed-code-box">
-                                        <pre class="embed-code">{embedStyleSnippet}</pre>
-                                    </div>
-                                    <div class="slds-m-top_x-small">
-                                        <lightning-button
-                                            label="Copy Code"
-                                            icon-name="utility:copy"
-                                            onclick={handleCopyStyleCode}>
-                                        </lightning-button>
-                                    </div>
-                                </div>
+                        <template if:true={showEmbedCode}>
+                            <!-- Scoped tabs -->
+                            <div class="slds-tabs_scoped">
+                                <ul class="slds-tabs_scoped__nav" role="tablist">
+                                    <li class={widgetTabClass} role="presentation">
+                                        <a class="slds-tabs_scoped__link" role="tab" data-tab="widget" onclick={handleEmbedTabClick}>Widget</a>
+                                    </li>
+                                    <li class={customHtmlTabClass} role="presentation">
+                                        <a class="slds-tabs_scoped__link" role="tab" data-tab="customhtml" onclick={handleEmbedTabClick}>Custom HTML</a>
+                                    </li>
+                                    <li class={iframeTabClass} role="presentation">
+                                        <a class="slds-tabs_scoped__link" role="tab" data-tab="iframe" onclick={handleEmbedTabClick}>iframe</a>
+                                    </li>
+                                </ul>
 
-                                <!-- iframe Alternative -->
-                                <div class="slds-col slds-size_1-of-1 slds-p-bottom_medium">
-                                    <div class="slds-text-title_bold slds-m-bottom_x-small">Alternative: iframe Embed</div>
-                                    <p class="slds-text-body_small slds-text-color_weak slds-m-bottom_x-small">
-                                        Use iframe if you need full DOM isolation or have CSP restrictions.
-                                    </p>
-                                    <div class="slds-box slds-box_x-small slds-theme_shade embed-code-box">
-                                        <pre class="embed-code">{embedIframeSnippet}</pre>
-                                    </div>
-                                    <div class="slds-m-top_x-small">
-                                        <lightning-button
-                                            label="Copy Code"
-                                            icon-name="utility:copy"
-                                            onclick={handleCopyIframeCode}>
-                                        </lightning-button>
-                                    </div>
-                                </div>
-
-                                <!-- reCAPTCHA Warning -->
-                                <template if:true={form.enableCaptcha}>
-                                    <div class="slds-col slds-size_1-of-1">
-                                        <div class="slds-scoped-notification slds-media slds-media_center slds-theme_warning" role="status">
-                                            <div class="slds-media__figure">
-                                                <lightning-icon icon-name="utility:warning" size="small"></lightning-icon>
+                                <!-- Tab 1: Widget -->
+                                <template if:true={isWidgetTab}>
+                                    <div class="slds-tabs_scoped__content slds-show" role="tabpanel">
+                                        <div class="slds-p-around_small">
+                                            <div class="slds-p-bottom_medium">
+                                                <div class="slds-text-title_bold slds-m-bottom_x-small">1. Add this script to your website:</div>
+                                                <div class="slds-box slds-box_x-small slds-theme_shade embed-code-box">
+                                                    <pre class="embed-code">{embedScriptSnippet}</pre>
+                                                </div>
+                                                <div class="slds-m-top_x-small">
+                                                    <lightning-button
+                                                        label="Copy Code"
+                                                        icon-name="utility:copy"
+                                                        onclick={handleCopyScriptCode}>
+                                                    </lightning-button>
+                                                </div>
                                             </div>
-                                            <div class="slds-media__body">
-                                                <p>
-                                                    <strong>reCAPTCHA Setup Required:</strong> Add your embedding domain to your
-                                                    <a href="https://www.google.com/recaptcha/admin" target="_blank" rel="noopener">Google reCAPTCHA allowed domains list</a>.
-                                                </p>
+
+                                            <div class="slds-p-bottom_medium">
+                                                <div class="slds-text-title_bold slds-m-bottom_x-small">2. (Optional) Customize styling with CSS variables:</div>
+                                                <div class="slds-box slds-box_x-small slds-theme_shade embed-code-box">
+                                                    <pre class="embed-code">{embedStyleSnippet}</pre>
+                                                </div>
+                                                <div class="slds-m-top_x-small">
+                                                    <lightning-button
+                                                        label="Copy Code"
+                                                        icon-name="utility:copy"
+                                                        onclick={handleCopyStyleCode}>
+                                                    </lightning-button>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
                                 </template>
-                            </template>
 
-                            <template if:false={hasAllowedDomains}>
-                                <div class="slds-col slds-size_1-of-1">
-                                    <div class="slds-illustration slds-illustration_small slds-p-around_medium slds-text-align_center">
-                                        <p class="slds-text-body_regular">Add allowed domains above to enable external embedding and view embed code.</p>
+                                <!-- Tab 2: Custom HTML -->
+                                <template if:true={isCustomHtmlTab}>
+                                    <div class="slds-tabs_scoped__content slds-show" role="tabpanel">
+                                        <div class="slds-p-around_small">
+                                            <p class="slds-text-body_small slds-text-color_weak slds-m-bottom_medium">
+                                                Build your own form HTML with full design control. The script handles validation, submission, file uploads, and CAPTCHA automatically.
+                                            </p>
+
+                                            <div class="slds-p-bottom_medium">
+                                                <div class="slds-text-title_bold slds-m-bottom_x-small">1. Add the form HTML:</div>
+                                                <div class="slds-box slds-box_x-small slds-theme_shade embed-code-box">
+                                                    <pre class="embed-code">{customHtmlSnippet}</pre>
+                                                </div>
+                                                <div class="slds-m-top_x-small">
+                                                    <lightning-button
+                                                        label="Copy HTML"
+                                                        icon-name="utility:copy"
+                                                        onclick={handleCopyCustomHtml}>
+                                                    </lightning-button>
+                                                </div>
+                                            </div>
+
+                                            <div class="slds-p-bottom_medium">
+                                                <div class="slds-text-title_bold slds-m-bottom_x-small">2. (Optional) Add starter styles:</div>
+                                                <div class="slds-box slds-box_x-small slds-theme_shade embed-code-box">
+                                                    <pre class="embed-code">{customCssSnippet}</pre>
+                                                </div>
+                                                <div class="slds-m-top_x-small">
+                                                    <lightning-button
+                                                        label="Copy CSS"
+                                                        icon-name="utility:copy"
+                                                        onclick={handleCopyCustomCss}>
+                                                    </lightning-button>
+                                                </div>
+                                            </div>
+
+                                            <div class="slds-p-bottom_medium">
+                                                <div class="slds-text-title_bold slds-m-bottom_x-small">3. Add the connect script:</div>
+                                                <div class="slds-box slds-box_x-small slds-theme_shade embed-code-box">
+                                                    <pre class="embed-code">{customJsSnippet}</pre>
+                                                </div>
+                                                <div class="slds-m-top_x-small">
+                                                    <lightning-button
+                                                        label="Copy JavaScript"
+                                                        icon-name="utility:copy"
+                                                        onclick={handleCopyCustomJs}>
+                                                    </lightning-button>
+                                                </div>
+                                            </div>
+
+                                            <div class="slds-scoped-notification slds-media slds-media_center slds-theme_info" role="status">
+                                                <div class="slds-media__figure">
+                                                    <lightning-icon icon-name="utility:info" size="small"></lightning-icon>
+                                                </div>
+                                                <div class="slds-media__body">
+                                                    <p>
+                                                        Input <code>name</code> attributes must match Case field API names.
+                                                        You can rearrange, add classes, and style freely.
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
-                                </div>
-                            </template>
-                        </div>
+                                </template>
+
+                                <!-- Tab 3: iframe -->
+                                <template if:true={isIframeTab}>
+                                    <div class="slds-tabs_scoped__content slds-show" role="tabpanel">
+                                        <div class="slds-p-around_small">
+                                            <p class="slds-text-body_small slds-text-color_weak slds-m-bottom_x-small">
+                                                Use iframe if you need full DOM isolation or have CSP restrictions.
+                                            </p>
+                                            <div class="slds-box slds-box_x-small slds-theme_shade embed-code-box">
+                                                <pre class="embed-code">{embedIframeSnippet}</pre>
+                                            </div>
+                                            <div class="slds-m-top_x-small">
+                                                <lightning-button
+                                                    label="Copy Code"
+                                                    icon-name="utility:copy"
+                                                    onclick={handleCopyIframeCode}>
+                                                </lightning-button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </template>
+
+                        <template if:false={showEmbedCode}>
+                            <div class="slds-illustration slds-illustration_small slds-p-around_medium slds-text-align_center">
+                                <p class="slds-text-body_regular">Enter allowed domains above and click "Generate Embed Code" to view embed snippets.</p>
+                            </div>
+                        </template>
                     </template>
                 </lightning-accordion-section>
             </lightning-accordion>

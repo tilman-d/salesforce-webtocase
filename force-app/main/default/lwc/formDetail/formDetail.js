@@ -51,6 +51,8 @@ export default class FormDetail extends LightningElement {
     @track defaultSiteId = null;
     @track defaultBaseUrl = null;
     @track defaultValues = [];
+    @track domainsConfirmed = false;
+    @track activeEmbedTab = 'widget';
     defaultFieldInfoMap = {};
     defaultFieldOptions = [];
 
@@ -155,6 +157,7 @@ export default class FormDetail extends LightningElement {
                         this.defaultValues = [];
                     }
                     this.hasUnsavedChanges = false;
+                    this.domainsConfirmed = !!(this.form.allowedDomains && this.form.allowedDomains.trim());
                 })
                 .catch(error => {
                     this.showToast('Error', this.getErrorMessage(error), 'error');
@@ -182,6 +185,7 @@ export default class FormDetail extends LightningElement {
             this.defaultValues = [];
             this.isLoading = false;
             this.hasUnsavedChanges = false;
+            this.domainsConfirmed = false;
         }
     }
 
@@ -189,9 +193,7 @@ export default class FormDetail extends LightningElement {
         return !this.formId;
     }
 
-    get activeSections() {
-        return ['settings', 'fields', 'defaults'];
-    }
+    activeSections = ['settings', 'fields', 'defaults', 'embed'];
 
     get pageTitle() {
         return this.isNewForm ? 'New Form' : 'Edit Form';
@@ -329,8 +331,51 @@ export default class FormDetail extends LightningElement {
         this.hasUnsavedChanges = true;
     }
 
+    handleConfirmDomains() {
+        if (this.form.allowedDomains && this.form.allowedDomains.trim().length > 0) {
+            this.domainsConfirmed = true;
+        }
+    }
+
     get hasAllowedDomains() {
         return this.form.allowedDomains && this.form.allowedDomains.trim().length > 0;
+    }
+
+    get showEmbedCode() {
+        return this.hasAllowedDomains && this.domainsConfirmed;
+    }
+
+    get confirmDomainsDisabled() {
+        return !this.hasAllowedDomains;
+    }
+
+    handleEmbedTabClick(event) {
+        event.preventDefault();
+        this.activeEmbedTab = event.currentTarget.dataset.tab;
+    }
+
+    get isWidgetTab() {
+        return this.activeEmbedTab === 'widget';
+    }
+
+    get isCustomHtmlTab() {
+        return this.activeEmbedTab === 'customhtml';
+    }
+
+    get isIframeTab() {
+        return this.activeEmbedTab === 'iframe';
+    }
+
+    get widgetTabClass() {
+        return 'slds-tabs_scoped__item' + (this.isWidgetTab ? ' slds-is-active' : '');
+    }
+
+    get customHtmlTabClass() {
+        return 'slds-tabs_scoped__item' + (this.isCustomHtmlTab ? ' slds-is-active' : '');
+    }
+
+    get iframeTabClass() {
+        return 'slds-tabs_scoped__item' + (this.isIframeTab ? ' slds-is-active' : '');
     }
 
     // Default Case Values getters and handlers
@@ -450,14 +495,55 @@ export default class FormDetail extends LightningElement {
     get embedStyleSnippet() {
         return `<style>
   #support-form {
+    /* Base */
     --wtc-primary-color: #0176d3;
     --wtc-font-family: system-ui, -apple-system, sans-serif;
-    --wtc-border-radius: 4px;
-    --wtc-input-border: 1px solid #c9c9c9;
-    --wtc-input-background: #ffffff;
     --wtc-text-color: #181818;
+    --wtc-border-radius: 4px;
     --wtc-error-color: #c23934;
     --wtc-success-color: #2e844a;
+
+    /* Container */
+    --wtc-container-max-width: 100%;
+    --wtc-container-padding: 0;
+
+    /* Title */
+    --wtc-title-font-size: 1.5rem;
+    --wtc-title-font-weight: 600;
+    --wtc-title-margin: 0 0 8px 0;
+
+    /* Description */
+    --wtc-description-color: #666;
+    --wtc-description-font-size: 0.875rem;
+
+    /* Labels */
+    --wtc-label-font-size: 0.875rem;
+    --wtc-label-font-weight: 500;
+    --wtc-label-color: var(--wtc-text-color);
+
+    /* Inputs */
+    --wtc-input-border: 1px solid #c9c9c9;
+    --wtc-input-background: #ffffff;
+    --wtc-input-padding: 10px 12px;
+    --wtc-input-font-size: 1rem;
+
+    /* Field layout */
+    --wtc-field-gap: 20px;
+
+    /* Submit button */
+    --wtc-submit-color: #fff;
+    --wtc-submit-background: var(--wtc-primary-color);
+    --wtc-submit-padding: 12px 24px;
+    --wtc-submit-font-size: 1rem;
+    --wtc-submit-border-radius: var(--wtc-border-radius);
+
+    /* Success message */
+    --wtc-success-background: #d4edda;
+    --wtc-success-border: 1px solid #c3e6cb;
+
+    /* Error message */
+    --wtc-error-background: #f8d7da;
+    --wtc-error-border: 1px solid #f5c6cb;
   }
 </style>`;
     }
@@ -491,6 +577,164 @@ export default class FormDetail extends LightningElement {
 
     handleCopyIframeCode() {
         this.copyToClipboard(this.embedIframeSnippet, 'iframe code copied to clipboard');
+    }
+
+    get customHtmlSnippet() {
+        const formName = this.form.formName || 'your-form-name';
+        const formId = 'wtc-' + formName;
+        let html = `<form id="${formId}">\n`;
+
+        if (this.fields && this.fields.length > 0) {
+            for (const field of this.fields) {
+                const label = field.fieldLabel || 'Field';
+                const name = field.caseField || 'Subject';
+                const req = field.required ? ' required' : '';
+                html += `  <div>\n`;
+                html += `    <label for="${name}">${label}${field.required ? ' *' : ''}</label>\n`;
+                if (field.fieldType === 'Textarea') {
+                    html += `    <textarea id="${name}" name="${name}"${req}></textarea>\n`;
+                } else if (field.fieldType === 'Email') {
+                    html += `    <input type="email" id="${name}" name="${name}"${req} />\n`;
+                } else if (field.fieldType === 'Phone') {
+                    html += `    <input type="tel" id="${name}" name="${name}"${req} />\n`;
+                } else {
+                    html += `    <input type="text" id="${name}" name="${name}"${req} />\n`;
+                }
+                html += `  </div>\n`;
+            }
+        }
+
+        if (this.form.enableFileUpload) {
+            html += `  <div>\n`;
+            html += `    <label for="wtc-file">Attachment</label>\n`;
+            html += `    <input type="file" id="wtc-file" />\n`;
+            html += `  </div>\n`;
+        }
+
+        if (this.form.enableCaptcha) {
+            html += `  <div id="wtc-captcha"></div>\n`;
+        }
+
+        html += `  <div id="wtc-error" hidden></div>\n`;
+        html += `  <button type="submit">Submit</button>\n`;
+        html += `</form>\n\n`;
+        html += `<div id="wtc-success" hidden>\n`;
+        html += `  <p>Your request has been submitted successfully.</p>\n`;
+        html += `  <p>Reference: <span data-wtc-case-number></span></p>\n`;
+        html += `</div>`;
+
+        return html;
+    }
+
+    get customCssSnippet() {
+        const formName = this.form.formName || 'your-form-name';
+        const formId = 'wtc-' + formName;
+        return `<style>
+  #${formId} {
+    max-width: 600px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    font-family: system-ui, -apple-system, sans-serif;
+  }
+  #${formId} label {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 0.875rem;
+    font-weight: 500;
+  }
+  #${formId} input,
+  #${formId} textarea {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 1rem;
+    box-sizing: border-box;
+  }
+  #${formId} textarea {
+    min-height: 100px;
+    resize: vertical;
+  }
+  #${formId} [aria-invalid="true"] {
+    border-color: #c23934;
+  }
+  #${formId} button[type="submit"] {
+    padding: 10px 24px;
+    background: #0176d3;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    font-size: 1rem;
+    cursor: pointer;
+  }
+  #wtc-error {
+    padding: 12px;
+    background: #f8d7da;
+    border: 1px solid #f5c6cb;
+    border-radius: 4px;
+    color: #721c24;
+    font-size: 0.875rem;
+  }
+  #wtc-success {
+    padding: 24px;
+    background: #d4edda;
+    border: 1px solid #c3e6cb;
+    border-radius: 4px;
+    color: #2e844a;
+    text-align: center;
+  }
+</style>`;
+    }
+
+    get customJsSnippet() {
+        const widgetUrl = this.embedWidgetUrl;
+        const apiBase = this.embedApiBase;
+        if (!widgetUrl || !apiBase) {
+            return '<!-- Configure a Site in Settings to generate embed code -->';
+        }
+        const formName = this.form.formName || 'your-form-name';
+        const formId = 'wtc-' + formName;
+
+        let opts = '';
+        opts += `    formName: '${formName}',\n`;
+        opts += `    formSelector: '#${formId}',\n`;
+        opts += `    apiBase: '${apiBase}',\n`;
+
+        if (this.form.enableFileUpload) {
+            opts += `    fileInputSelector: '#wtc-file',\n`;
+        }
+        if (this.form.enableCaptcha) {
+            opts += `    captchaContainerId: 'wtc-captcha',\n`;
+        }
+
+        opts += `    errorContainerId: 'wtc-error',\n`;
+        opts += `    successContainerId: 'wtc-success',\n`;
+        opts += `    onSuccess: function(caseNumber) {\n`;
+        opts += `      console.log('Case created:', caseNumber);\n`;
+        opts += `    },\n`;
+        opts += `    onError: function(error) {\n`;
+        opts += `      console.error('Error:', error);\n`;
+        opts += `    }`;
+
+        return `<script src="${widgetUrl}"></script>
+<script>
+  WebToCaseForm.connect({
+${opts}
+  });
+</script>`;
+    }
+
+    handleCopyCustomHtml() {
+        this.copyToClipboard(this.customHtmlSnippet, 'HTML code copied to clipboard');
+    }
+
+    handleCopyCustomCss() {
+        this.copyToClipboard(this.customCssSnippet, 'CSS code copied to clipboard');
+    }
+
+    handleCopyCustomJs() {
+        this.copyToClipboard(this.customJsSnippet, 'JavaScript code copied to clipboard');
     }
 
     copyToClipboard(text, successMessage) {
