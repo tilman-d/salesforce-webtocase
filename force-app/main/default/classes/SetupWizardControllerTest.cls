@@ -1144,4 +1144,277 @@ private class SetupWizardControllerTest {
         reCAPTCHA_Settings__c settings = reCAPTCHA_Settings__c.getOrgDefaults();
         System.assertEquals('V2_Invisible', settings.Captcha_Type__c, 'Type should be saved');
     }
+
+    // ==================== Real Site Tests (Permission Checking & Configuration) ====================
+
+    /**
+     * Helper: Get first active Site with a Guest User, or null if none
+     */
+    private static Site getActiveSiteWithGuest() {
+        List<Site> sites = [SELECT Id, GuestUserId, Name, MasterLabel, Subdomain, UrlPathPrefix, Status
+                            FROM Site WHERE Status = 'Active' AND GuestUserId != null LIMIT 1];
+        return sites.isEmpty() ? null : sites[0];
+    }
+
+    /**
+     * Test getSetupStatus with a real active Site — covers checkObjectPermission,
+     * checkFieldPermission, checkApexAccess, checkVfPageAccess, getSiteBaseUrl
+     */
+    @isTest
+    static void testGetSetupStatusWithRealSite() {
+        Site site = getActiveSiteWithGuest();
+        if (site == null) { return; } // No usable Site in test org
+
+        Test.startTest();
+        SetupWizardController.ValidationResult result = SetupWizardController.getSetupStatus(site.Id);
+        Test.stopTest();
+
+        System.assertNotEquals(null, result, 'Result should not be null');
+        System.assertNotEquals(null, result.permissions, 'Permissions should not be null');
+        System.assert(result.permissions.size() > 0, 'Should have permission checks');
+        // Verify each permission has a name and permissionType
+        for (SetupWizardController.PermissionStatus ps : result.permissions) {
+            System.assertNotEquals(null, ps.name, 'Permission name should not be null');
+            System.assertNotEquals(null, ps.permissionType, 'Permission type should not be null');
+        }
+    }
+
+    /**
+     * Test configurePermissions with a real active Site — covers configureObjectPermission,
+     * configureFieldPermission
+     */
+    @isTest
+    static void testConfigurePermissionsWithRealSite() {
+        Site site = getActiveSiteWithGuest();
+        if (site == null) { return; }
+
+        Test.startTest();
+        SetupWizardController.ConfigResult result = SetupWizardController.configurePermissions(site.Id);
+        Test.stopTest();
+
+        System.assertNotEquals(null, result, 'Result should not be null');
+        System.assertNotEquals(null, result.results, 'Results should not be null');
+        System.assert(result.results.size() > 0, 'Should have configuration results');
+    }
+
+    /**
+     * Test validateConfiguration with a real active Site — covers the thin wrapper
+     */
+    @isTest
+    static void testValidateConfigurationWithRealSite() {
+        Site site = getActiveSiteWithGuest();
+        if (site == null) { return; }
+
+        Test.startTest();
+        SetupWizardController.ValidationResult result = SetupWizardController.validateConfiguration(site.Id);
+        Test.stopTest();
+
+        System.assertNotEquals(null, result, 'Result should not be null');
+        System.assertNotEquals(null, result.permissions, 'Permissions should not be null');
+    }
+
+    /**
+     * Test getPublicUrl with a real active Site and a form name
+     */
+    @isTest
+    static void testGetPublicUrlWithRealSite() {
+        Site site = getActiveSiteWithGuest();
+        if (site == null) { return; }
+
+        Test.startTest();
+        String url = SetupWizardController.getPublicUrl(site.Id, 'test-form');
+        Test.stopTest();
+
+        if (url != null) {
+            System.assert(url.contains('CaseFormPage'), 'URL should contain CaseFormPage');
+            System.assert(url.contains('test-form'), 'URL should contain form name');
+        }
+    }
+
+    /**
+     * Test getPublicUrl with real Site and null form name
+     */
+    @isTest
+    static void testGetPublicUrlNoFormName() {
+        Site site = getActiveSiteWithGuest();
+        if (site == null) { return; }
+
+        Test.startTest();
+        String url = SetupWizardController.getPublicUrl(site.Id, null);
+        Test.stopTest();
+
+        if (url != null) {
+            System.assert(url.contains('CaseFormPage'), 'URL should contain CaseFormPage');
+            System.assert(!url.contains('?form='), 'URL should not have form param when name is null');
+        }
+    }
+
+    /**
+     * Test getConfigSummary with a real active Site
+     */
+    @isTest
+    static void testGetConfigSummaryWithRealSite() {
+        Site site = getActiveSiteWithGuest();
+        if (site == null) { return; }
+
+        Test.startTest();
+        SetupWizardController.ConfigSummary summary = SetupWizardController.getConfigSummary(site.Id);
+        Test.stopTest();
+
+        System.assertNotEquals(null, summary, 'Summary should not be null');
+        System.assertNotEquals(null, summary.siteName, 'Site name should not be null');
+        System.assertNotEquals(null, summary.configuredAt, 'configuredAt should not be null');
+        System.assertNotEquals(null, summary.configuredBy, 'configuredBy should not be null');
+    }
+
+    /**
+     * Test getFullStatus with a real active Site saved as default
+     */
+    @isTest
+    static void testGetFullStatusWithRealSite() {
+        Site site = getActiveSiteWithGuest();
+        if (site == null) { return; }
+
+        reCAPTCHA_Settings__c settings = new reCAPTCHA_Settings__c(
+            SetupOwnerId = UserInfo.getOrganizationId(),
+            Default_Site_Id__c = site.Id
+        );
+        insert settings;
+
+        Test.startTest();
+        SetupWizardController.FullStatusResult result = SetupWizardController.getFullStatus();
+        Test.stopTest();
+
+        System.assertEquals(true, result.isConfigured, 'Should be configured with valid Site');
+        System.assertNotEquals(null, result.siteName, 'Site name should not be null');
+        System.assertNotEquals(null, result.siteStatus, 'Site status should not be null');
+        System.assert(result.permissionsTotal > 0, 'Should have permission checks');
+    }
+
+    /**
+     * Test getFullStatus with reCAPTCHA configured and real Site
+     */
+    @isTest
+    static void testGetFullStatusWithRecaptchaAndRealSite() {
+        Site site = getActiveSiteWithGuest();
+        if (site == null) { return; }
+
+        reCAPTCHA_Settings__c settings = new reCAPTCHA_Settings__c(
+            SetupOwnerId = UserInfo.getOrganizationId(),
+            Default_Site_Id__c = site.Id,
+            Site_Key__c = '6LeTestSiteKey123456789012345678',
+            Secret_Key__c = '6LeTestSecretKey12345678901234567',
+            Captcha_Type__c = 'V2_Invisible'
+        );
+        insert settings;
+
+        Test.startTest();
+        SetupWizardController.FullStatusResult result = SetupWizardController.getFullStatus();
+        Test.stopTest();
+
+        System.assertEquals(true, result.isConfigured, 'Should be configured');
+        System.assertEquals(true, result.recaptchaConfigured, 'reCAPTCHA should be configured');
+        System.assertEquals('V2_Invisible', result.recaptchaType, 'Captcha type should match');
+        System.assertNotEquals(null, result.recaptchaSiteKeyMasked, 'Site key should be masked');
+        System.assert(result.permissionsTotal > 0, 'Should have permissions');
+    }
+
+    /**
+     * Test saveDefaultSite with a real active Site
+     */
+    @isTest
+    static void testSaveDefaultSiteWithRealSite() {
+        Site site = getActiveSiteWithGuest();
+        if (site == null) { return; }
+
+        Test.startTest();
+        SetupWizardController.saveDefaultSite(site.Id);
+        Test.stopTest();
+
+        reCAPTCHA_Settings__c settings = reCAPTCHA_Settings__c.getOrgDefaults();
+        System.assertEquals(site.Id, settings.Default_Site_Id__c, 'Default Site ID should be saved');
+    }
+
+    /**
+     * Test saveDefaultSite CRUD denial
+     */
+    @isTest
+    static void testSaveDefaultSiteNoCrudAccess() {
+        SetupWizardController.testDenyCrud = true;
+
+        Test.startTest();
+        try {
+            SetupWizardController.saveDefaultSite('0DM000000000001');
+            System.assert(false, 'Should have thrown exception');
+        } catch (AuraHandledException e) {
+            System.assert(e.getMessage().contains('permissions') || e.getMessage().contains('Insufficient'),
+                'Error should mention permissions');
+        }
+        Test.stopTest();
+    }
+
+    /**
+     * Test configurePermissions with CRUD denied — covers configureObjectPermission
+     * and configureFieldPermission CRUD check branches
+     */
+    @isTest
+    static void testConfigurePermissionsNoCrudAccess() {
+        Site site = getActiveSiteWithGuest();
+        if (site == null) { return; }
+
+        SetupWizardController.testDenyCrud = true;
+
+        Test.startTest();
+        SetupWizardController.ConfigResult result = SetupWizardController.configurePermissions(site.Id);
+        Test.stopTest();
+
+        System.assertEquals(false, result.success, 'Should fail with CRUD denied');
+        Boolean foundError = false;
+        for (SetupWizardController.PermissionStatus ps : result.results) {
+            if (String.isNotBlank(ps.errorMessage) && ps.errorMessage.contains('Insufficient')) {
+                foundError = true;
+                break;
+            }
+        }
+        System.assert(foundError, 'Should have at least one insufficient permissions error');
+    }
+
+    /**
+     * Test getSetupStatus with a Site that has no Guest User configured
+     * Uses a non-Active Site if available, otherwise tests error handling
+     */
+    @isTest
+    static void testGetSetupStatusNoGuestUser() {
+        List<Site> sitesNoGuest = [SELECT Id FROM Site WHERE GuestUserId = null LIMIT 1];
+        if (sitesNoGuest.isEmpty()) { return; }
+
+        Test.startTest();
+        try {
+            SetupWizardController.getSetupStatus(sitesNoGuest[0].Id);
+            System.assert(false, 'Should have thrown exception');
+        } catch (AuraHandledException e) {
+            System.assert(e.getMessage().contains('Guest User') || e.getMessage().contains('Error'),
+                'Should mention Guest User issue');
+        }
+        Test.stopTest();
+    }
+
+    /**
+     * Test configurePermissions with a Site that has no Guest User configured
+     */
+    @isTest
+    static void testConfigurePermissionsNoGuestUser() {
+        List<Site> sitesNoGuest = [SELECT Id FROM Site WHERE GuestUserId = null LIMIT 1];
+        if (sitesNoGuest.isEmpty()) { return; }
+
+        Test.startTest();
+        try {
+            SetupWizardController.configurePermissions(sitesNoGuest[0].Id);
+            System.assert(false, 'Should have thrown exception');
+        } catch (AuraHandledException e) {
+            System.assert(e.getMessage().contains('Guest User') || e.getMessage().contains('Error'),
+                'Should mention Guest User issue');
+        }
+        Test.stopTest();
+    }
 }
