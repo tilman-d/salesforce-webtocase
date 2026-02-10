@@ -7,15 +7,19 @@
 public with sharing class SetupWizardController {
 
     // Objects that need permissions configured
-    private static final List<String> REQUIRED_OBJECT_READ = new List<String>{'Form__c', 'Form_Field__c'};
-    // Note: ContentVersion and ContentDocumentLink don't need explicit permissions because
-    // CaseFormController uses 'without sharing' which bypasses Guest User restrictions
+    private static final List<String> REQUIRED_OBJECT_READ = new List<String>{'Form__c', 'Form_Field__c', 'Error_Log__c'};
+    // Note: 'without sharing' bypasses sharing rules (record-level security) but NOT CRUD/FLS
+    // describe checks. ContentVersion and ContentDocumentLink are standard objects whose CRUD
+    // permissions are typically pre-granted on Site Guest User profiles by the platform.
+    // Runtime CRUD checks in CaseFormController will validate and fail with a clear error
+    // if these permissions are missing.
     private static final List<String> REQUIRED_OBJECT_CREATE = new List<String>{'Case', 'Error_Log__c'};
 
     // Fields that need read permissions
     private static final Map<String, List<String>> REQUIRED_FIELD_READ = new Map<String, List<String>>{
         'Form__c' => new List<String>{'Description__c', 'Enable_File_Upload__c', 'Max_File_Size_MB__c', 'Success_Message__c'},
-        'Form_Field__c' => new List<String>{'Required__c'}
+        'Form_Field__c' => new List<String>{'Required__c'},
+        'Error_Log__c' => new List<String>{'Error_Message__c', 'Form_Id__c', 'Timestamp__c'}
     };
 
     // Apex classes that need access
@@ -23,6 +27,9 @@ public with sharing class SetupWizardController {
 
     // VF pages that need access
     private static final List<String> REQUIRED_VF_PAGES = new List<String>{'CaseFormPage'};
+
+    // Test-visible flag to simulate CRUD denial in tests
+    @TestVisible private static Boolean testDenyCrud = false;
 
     /**
      * Wrapper for precondition check results
@@ -505,6 +512,8 @@ public with sharing class SetupWizardController {
 
     /**
      * Check object permission for a permission set
+     * Note: ObjectPermissions is a setup entity — CRUD checks on setup objects are not
+     * enforced since this method runs in admin-only (with sharing) context.
      */
     private static PermissionStatus checkObjectPermission(Id permSetId, String objectName, String permType) {
         PermissionStatus ps = new PermissionStatus();
@@ -512,9 +521,12 @@ public with sharing class SetupWizardController {
         ps.permissionType = 'Object';
 
         try {
-            String query = 'SELECT Id, PermissionsRead, PermissionsCreate FROM ObjectPermissions ' +
-                          'WHERE ParentId = :permSetId AND SobjectType = :objectName LIMIT 1';
-            List<ObjectPermissions> perms = Database.query(query);
+            List<ObjectPermissions> perms = [
+                SELECT Id, PermissionsRead, PermissionsCreate
+                FROM ObjectPermissions
+                WHERE ParentId = :permSetId AND SobjectType = :objectName
+                LIMIT 1
+            ];
 
             if (!perms.isEmpty()) {
                 if (permType == 'Read') {
@@ -729,6 +741,16 @@ public with sharing class SetupWizardController {
         ps.canAutomate = true;
 
         try {
+            // CRUD checks for ObjectPermissions (setup entity — CRUD checks only, no stripInaccessible)
+            Boolean crudDenied = Test.isRunningTest() && testDenyCrud;
+            if (crudDenied || !Schema.sObjectType.ObjectPermissions.isAccessible() ||
+                !Schema.sObjectType.ObjectPermissions.isCreateable() ||
+                !Schema.sObjectType.ObjectPermissions.isUpdateable()) {
+                ps.configured = false;
+                ps.errorMessage = 'Insufficient permissions to manage ObjectPermissions';
+                return ps;
+            }
+
             // Check if permission already exists
             List<ObjectPermissions> existing = [
                 SELECT Id, PermissionsRead, PermissionsCreate
@@ -778,6 +800,16 @@ public with sharing class SetupWizardController {
         ps.canAutomate = true;
 
         try {
+            // CRUD checks for FieldPermissions (setup entity — CRUD checks only, no stripInaccessible)
+            Boolean crudDenied = Test.isRunningTest() && testDenyCrud;
+            if (crudDenied || !Schema.sObjectType.FieldPermissions.isAccessible() ||
+                !Schema.sObjectType.FieldPermissions.isCreateable() ||
+                !Schema.sObjectType.FieldPermissions.isUpdateable()) {
+                ps.configured = false;
+                ps.errorMessage = 'Insufficient permissions to manage FieldPermissions';
+                return ps;
+            }
+
             String fieldKey = objectName + '.' + fieldName;
 
             // Check if permission already exists
@@ -827,6 +859,15 @@ public with sharing class SetupWizardController {
     @AuraEnabled
     public static String createSampleForm() {
         try {
+            // CRUD checks for Form__c and Form_Field__c
+            Boolean crudDenied = Test.isRunningTest() && testDenyCrud;
+            if (crudDenied || !Schema.sObjectType.Form__c.isAccessible() || !Schema.sObjectType.Form__c.isCreateable()) {
+                throw createException('Insufficient permissions to create Form__c');
+            }
+            if (crudDenied || !Schema.sObjectType.Form_Field__c.isCreateable()) {
+                throw createException('Insufficient permissions to create Form_Field__c');
+            }
+
             // Check if sample form already exists
             List<Form__c> existing = [
                 SELECT Id FROM Form__c
@@ -1014,6 +1055,14 @@ public with sharing class SetupWizardController {
         ReCaptchaSettingsResult result = new ReCaptchaSettingsResult();
 
         try {
+            // CRUD checks for custom settings
+            Boolean crudDenied = Test.isRunningTest() && testDenyCrud;
+            if (crudDenied || !Schema.sObjectType.reCAPTCHA_Settings__c.isCreateable() ||
+                !Schema.sObjectType.reCAPTCHA_Settings__c.isUpdateable()) {
+                result.errorMessage = 'Insufficient permissions to save reCAPTCHA settings';
+                return result;
+            }
+
             // Trim inputs
             String trimmedSiteKey = String.isNotBlank(siteKey) ? siteKey.trim() : null;
             String trimmedSecretKey = String.isNotBlank(secretKey) ? secretKey.trim() : null;
@@ -1098,6 +1147,13 @@ public with sharing class SetupWizardController {
         }
 
         try {
+            // CRUD checks for custom settings
+            Boolean crudDenied = Test.isRunningTest() && testDenyCrud;
+            if (crudDenied || !Schema.sObjectType.reCAPTCHA_Settings__c.isCreateable() ||
+                !Schema.sObjectType.reCAPTCHA_Settings__c.isUpdateable()) {
+                throw createException('Insufficient permissions to save default site settings');
+            }
+
             // Query Site to validate it exists
             Site site = [SELECT Id, Name FROM Site WHERE Id = :siteId LIMIT 1];
 
@@ -1133,6 +1189,13 @@ public with sharing class SetupWizardController {
         ReCaptchaSettingsResult result = new ReCaptchaSettingsResult();
 
         try {
+            // CRUD checks for custom settings
+            Boolean crudDenied = Test.isRunningTest() && testDenyCrud;
+            if (crudDenied || !Schema.sObjectType.reCAPTCHA_Settings__c.isUpdateable()) {
+                result.errorMessage = 'Insufficient permissions to clear reCAPTCHA settings';
+                return result;
+            }
+
             reCAPTCHA_Settings__c settings = reCAPTCHA_Settings__c.getOrgDefaults();
 
             if (settings != null && settings.Id != null) {

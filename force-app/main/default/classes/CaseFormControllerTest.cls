@@ -612,6 +612,7 @@ private class CaseFormControllerTest {
         // Create a Case first
         Case testCase = new Case(Subject = 'Test Async Path', Status = 'New');
         insert testCase;
+        WebToCaseNonceService.authorizeCaseForUpload(testCase.Id);
 
         String fileName = 'large-document.pdf';
         String uploadKey = 'test-async-upload-key';
@@ -662,6 +663,7 @@ private class CaseFormControllerTest {
     static void testServerSideFileSizeValidation() {
         Case testCase = new Case(Subject = 'Test Size Validation', Status = 'New');
         insert testCase;
+        WebToCaseNonceService.authorizeCaseForUpload(testCase.Id);
 
         String fileName = 'too-large.pdf';
         String uploadKey = 'test-size-key';
@@ -692,6 +694,7 @@ private class CaseFormControllerTest {
     static void testCheckUploadStatusComplete() {
         Case testCase = new Case(Subject = 'Test Status Complete', Status = 'New');
         insert testCase;
+        WebToCaseNonceService.authorizeCaseForUpload(testCase.Id);
 
         // Create a final file on the Case
         ContentVersion cv = new ContentVersion();
@@ -724,6 +727,7 @@ private class CaseFormControllerTest {
     static void testCheckUploadStatusProcessing() {
         Case testCase = new Case(Subject = 'Test Status Processing', Status = 'New');
         insert testCase;
+        WebToCaseNonceService.authorizeCaseForUpload(testCase.Id);
 
         String uploadKey = 'processing-test-key';
 
@@ -753,6 +757,7 @@ private class CaseFormControllerTest {
     static void testCheckUploadStatusProcessingRaceCondition() {
         Case testCase = new Case(Subject = 'Test Status Processing Race', Status = 'New');
         insert testCase;
+        WebToCaseNonceService.authorizeCaseForUpload(testCase.Id);
 
         Test.startTest();
         Map<String, Object> result = CaseFormController.checkUploadStatus(
@@ -770,6 +775,7 @@ private class CaseFormControllerTest {
     static void testCheckUploadStatusWithErrorLog() {
         Case testCase = new Case(Subject = 'Test Status Error Log', Status = 'New');
         insert testCase;
+        WebToCaseNonceService.authorizeCaseForUpload(testCase.Id);
 
         // Create a recent error log for this case
         ErrorLogger.log('FileAssemblyQueueable: test error', 'stack trace', testCase.Id);
@@ -781,6 +787,26 @@ private class CaseFormControllerTest {
         Test.stopTest();
 
         System.assertEquals('error', result.get('status'), 'Status should be error when error log exists');
+    }
+
+    /**
+     * Test checkUploadStatus rejects an unauthorized Case ID (IDOR protection)
+     */
+    @isTest
+    static void testCheckUploadStatusUnauthorizedCaseId() {
+        // Create a Case directly (no authorizeCaseForUpload call)
+        Case directCase = new Case(Subject = 'Unauthorized Status Check', Status = 'New');
+        insert directCase;
+
+        Test.startTest();
+        Map<String, Object> result = CaseFormController.checkUploadStatus(
+            directCase.Id, 'any-key', 'any-file.pdf'
+        );
+        Test.stopTest();
+
+        System.assertEquals('error', result.get('status'), 'Should return error for unauthorized case');
+        System.assert(((String)result.get('error')).contains('not authorized'),
+            'Error should mention not authorized');
     }
 
     /**
@@ -823,6 +849,7 @@ private class CaseFormControllerTest {
     static void testUploadKeySanitization() {
         Case testCase = new Case(Subject = 'Test Key Sanitization', Status = 'New');
         insert testCase;
+        WebToCaseNonceService.authorizeCaseForUpload(testCase.Id);
 
         String chunkData = EncodingUtil.base64Encode(Blob.valueOf('test data'));
         // uploadKey with __ should be sanitized to -
@@ -845,6 +872,7 @@ private class CaseFormControllerTest {
     static void testSyncPathStillWorksForSmallFiles() {
         Case testCase = new Case(Subject = 'Test Sync Path', Status = 'New');
         insert testCase;
+        WebToCaseNonceService.authorizeCaseForUpload(testCase.Id);
 
         String fileName = 'small-document.txt';
         String uploadKey = 'test-sync-key';
@@ -885,6 +913,105 @@ private class CaseFormControllerTest {
         ];
         System.assertEquals(1, finalFiles.size(), 'Final file should exist');
         System.assertEquals('Part1-Part2-Part3', finalFiles[0].VersionData.toString(), 'Content should match');
+    }
+
+    /**
+     * Test submitForm returns permission error when CRUD is denied
+     */
+    @isTest
+    static void testSubmitFormNoCrudAccess() {
+        Form__c testForm = [SELECT Id FROM Form__c WHERE Form_Name__c = 'test-form' LIMIT 1];
+
+        Map<String, String> fieldValues = new Map<String, String>{
+            'Subject' => 'Test CRUD Denied'
+        };
+
+        CaseFormController.testDenyCrud = true;
+
+        Test.startTest();
+        Map<String, Object> result = CaseFormController.submitForm(
+            testForm.Id, fieldValues, '', '', ''
+        );
+        Test.stopTest();
+
+        System.assertEquals(false, result.get('success'), 'Should fail when CRUD denied');
+        System.assert(((String)result.get('error')).contains('permissions'),
+            'Error should mention permissions');
+    }
+
+    /**
+     * Test uploadFileChunk returns permission error when CRUD is denied
+     */
+    @isTest
+    static void testUploadChunkNoCrudAccess() {
+        Case testCase = new Case(Subject = 'Test CRUD Chunk', Status = 'New');
+        insert testCase;
+        WebToCaseNonceService.authorizeCaseForUpload(testCase.Id);
+
+        CaseFormController.testDenyCrud = true;
+
+        Test.startTest();
+        Map<String, Object> result = CaseFormController.uploadFileChunk(
+            testCase.Id, 'file.txt',
+            EncodingUtil.base64Encode(Blob.valueOf('test')),
+            0, 1, 'test-key'
+        );
+        Test.stopTest();
+
+        System.assertEquals(false, result.get('success'), 'Should fail when CRUD denied');
+        System.assert(((String)result.get('error')).contains('permissions'),
+            'Error should mention permissions');
+    }
+
+    /**
+     * Test uploadFileChunk rejects a Case ID not created through submitForm (IDOR protection)
+     */
+    @isTest
+    static void testUploadChunkUnauthorizedCaseId() {
+        // Create a Case directly (bypassing submitForm — no authorizeCaseForUpload call)
+        Case directCase = new Case(Subject = 'Direct Case', Status = 'New');
+        insert directCase;
+
+        String chunkData = EncodingUtil.base64Encode(Blob.valueOf('test data'));
+
+        Test.startTest();
+        Map<String, Object> result = CaseFormController.uploadFileChunk(
+            directCase.Id, 'file.txt', chunkData, 0, 1, 'test-key'
+        );
+        Test.stopTest();
+
+        System.assertEquals(false, result.get('success'), 'Should fail for unauthorized case');
+        System.assert(((String)result.get('error')).contains('not authorized'),
+            'Error should mention not authorized');
+    }
+
+    /**
+     * Test uploadFileChunk succeeds for a Case created through submitForm (authorized)
+     */
+    @isTest
+    static void testUploadChunkAuthorizedCaseId() {
+        Form__c testForm = [SELECT Id FROM Form__c WHERE Form_Name__c = 'test-form' LIMIT 1];
+
+        Map<String, String> fieldValues = new Map<String, String>{
+            'Subject' => 'Test IDOR Authorized'
+        };
+
+        Test.startTest();
+        // Create Case through submitForm (which calls authorizeCaseForUpload)
+        Map<String, Object> submitResult = CaseFormController.submitForm(
+            testForm.Id, fieldValues, '', '', ''
+        );
+        System.assertEquals(true, submitResult.get('success'), 'Submit should succeed');
+        String caseId = (String) submitResult.get('caseId');
+
+        // Now upload a chunk — should succeed because Case is authorized
+        String chunkData = EncodingUtil.base64Encode(Blob.valueOf('authorized data'));
+        Map<String, Object> result = CaseFormController.uploadFileChunk(
+            caseId, 'file.txt', chunkData, 0, 1, 'auth-key'
+        );
+        Test.stopTest();
+
+        System.assertEquals(true, result.get('success'), 'Should succeed for authorized case');
     }
 
     /**
@@ -1350,6 +1477,7 @@ private class CaseFormControllerTest {
         // Create a Case first
         Case testCase = new Case(Subject = 'Test Chunked Upload', Status = 'New');
         insert testCase;
+        WebToCaseNonceService.authorizeCaseForUpload(testCase.Id);
 
         String fileName = 'test-small-file.txt';
         String fileContent = 'Hello World - Small File Content';
@@ -1397,6 +1525,7 @@ private class CaseFormControllerTest {
         // Create a Case first
         Case testCase = new Case(Subject = 'Test Multi-Chunk Upload', Status = 'New');
         insert testCase;
+        WebToCaseNonceService.authorizeCaseForUpload(testCase.Id);
 
         String fileName = 'test-large-file.txt';
         String uploadKey = 'test-multi-chunk-key';

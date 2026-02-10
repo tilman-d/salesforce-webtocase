@@ -1,0 +1,4 @@
+# Org-specific metadata — not part of the managed package
+**/corsWhitelistOrigins/
+**/cspTrustedSites/
+**/sites/

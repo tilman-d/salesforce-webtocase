@@ -209,6 +209,61 @@ public class WebToCaseNonceService {
         return cacheAvailable;
     }
 
+    // ==================== Case Upload Authorization ====================
+
+    // Cache key prefix for case upload authorization
+    private static final String CASE_AUTH_PREFIX = 'caseauth';
+
+    /**
+     * Authorize a Case for file upload after successful creation via submitForm.
+     * Stores a marker in Platform Cache (or in-memory fallback) with the same TTL as nonces.
+     * @param caseId The Case ID that was just created
+     */
+    public static void authorizeCaseForUpload(String caseId) {
+        if (String.isBlank(caseId)) {
+            return;
+        }
+        String cacheKey = CASE_AUTH_PREFIX + caseId;
+
+        if (isCacheAvailable()) {
+            try {
+                Cache.OrgPartition partition = Cache.Org.getPartition(CACHE_PARTITION);
+                partition.put(cacheKey, 'authorized', NONCE_TTL_SECONDS);
+            } catch (Exception e) {
+                testModeCache.put(cacheKey, 'authorized');
+            }
+        } else {
+            testModeCache.put(cacheKey, 'authorized');
+        }
+    }
+
+    /**
+     * Check whether a Case ID was authorized for file upload via submitForm.
+     * @param caseId The Case ID to validate
+     * @return true if the Case was authorized, false otherwise
+     */
+    public static Boolean isCaseAuthorizedForUpload(String caseId) {
+        if (String.isBlank(caseId)) {
+            return false;
+        }
+        String cacheKey = CASE_AUTH_PREFIX + caseId;
+
+        if (isCacheAvailable()) {
+            try {
+                Cache.OrgPartition partition = Cache.Org.getPartition(CACHE_PARTITION);
+                Object cached = partition.get(cacheKey);
+                if (cached != null) {
+                    return true;
+                }
+            } catch (Exception e) {
+                System.debug(LoggingLevel.WARN, 'Cache unavailable for auth check, using fallback: ' + e.getMessage());
+            }
+        }
+
+        // Check in-memory fallback
+        return testModeCache.containsKey(cacheKey);
+    }
+
     /**
      * Custom exception for nonce-related errors
      */

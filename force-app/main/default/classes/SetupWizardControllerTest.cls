@@ -1069,6 +1069,61 @@ private class SetupWizardControllerTest {
         System.assertEquals(null, result.recaptchaSiteKeyMasked, 'Masked key should be null when no key set');
     }
 
+    // ==================== CRUD Denial Tests ====================
+
+    /**
+     * Test createSampleForm fails when CRUD is denied
+     */
+    @isTest
+    static void testCreateSampleFormNoCrudAccess() {
+        SetupWizardController.testDenyCrud = true;
+
+        Test.startTest();
+        try {
+            SetupWizardController.createSampleForm();
+            System.assert(false, 'Should have thrown exception');
+        } catch (AuraHandledException e) {
+            System.assert(e.getMessage().contains('permissions') || e.getMessage().contains('Insufficient'),
+                'Error should mention permissions: ' + e.getMessage());
+        }
+        Test.stopTest();
+    }
+
+    /**
+     * Test saveReCaptchaSettings returns error when CRUD is denied
+     */
+    @isTest
+    static void testSaveReCaptchaSettingsNoCrudAccess() {
+        SetupWizardController.testDenyCrud = true;
+
+        Test.startTest();
+        SetupWizardController.ReCaptchaSettingsResult result = SetupWizardController.saveReCaptchaSettings(
+            'TestSiteKey', 'TestSecretKey', null, null
+        );
+        Test.stopTest();
+
+        System.assertEquals(false, result.isConfigured, 'Should not be configured');
+        System.assert(String.isNotBlank(result.errorMessage), 'Should have error message');
+        System.assert(result.errorMessage.contains('permissions') || result.errorMessage.contains('Insufficient'),
+            'Error should mention permissions');
+    }
+
+    /**
+     * Test clearReCaptchaSettings returns error when CRUD is denied
+     */
+    @isTest
+    static void testClearReCaptchaSettingsNoCrudAccess() {
+        SetupWizardController.testDenyCrud = true;
+
+        Test.startTest();
+        SetupWizardController.ReCaptchaSettingsResult result = SetupWizardController.clearReCaptchaSettings();
+        Test.stopTest();
+
+        System.assert(String.isNotBlank(result.errorMessage), 'Should have error message');
+        System.assert(result.errorMessage.contains('permissions') || result.errorMessage.contains('Insufficient'),
+            'Error should mention permissions');
+    }
+
     /**
      * Test saveReCaptchaSettings - v2 Invisible type
      */

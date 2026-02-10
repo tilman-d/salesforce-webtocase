@@ -3,6 +3,7 @@
     <fullName>Google_reCAPTCHA</fullName>
     <description>Google reCAPTCHA API endpoint for server-side token verification</description>
     <disableProtocolSecurity>false</disableProtocolSecurity>
-    <isActive>true</isActive>
+    <!-- Deactivated for v1 MVP - re-activate for v2 -->
+    <isActive>false</isActive>
     <url>https://www.google.com</url>
 </RemoteSiteSetting>

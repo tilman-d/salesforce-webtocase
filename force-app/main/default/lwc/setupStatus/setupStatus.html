@@ -78,7 +78,8 @@
                         </div>
                     </div>
 
-                    <!-- reCAPTCHA -->
+                    <!-- reCAPTCHA (v1 MVP: hidden — set showRecaptchaPanel to true for v2) -->
+                    <template lwc:if={showRecaptchaPanel}>
                     <div class="slds-col slds-size_1-of-2 slds-p-bottom_small">
                         <div class="status-box slds-box slds-box_x-small">
                             <h3 class="slds-text-title_caps slds-m-bottom_x-small">reCAPTCHA</h3>
@@ -100,6 +101,7 @@
                             </dl>
                         </div>
                     </div>
+                    </template>
 
                     <!-- Form URL -->
                     <div class="slds-col slds-size_1-of-2 slds-p-bottom_small">

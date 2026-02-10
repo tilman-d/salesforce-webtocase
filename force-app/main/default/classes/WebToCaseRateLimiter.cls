@@ -10,6 +10,9 @@ public class WebToCaseRateLimiter {
     // Cleanup threshold: delete counters older than this many hours
     private static final Integer CLEANUP_HOURS = 24;
 
+    // Test-visible flag to simulate CRUD denial in tests
+    @TestVisible private static Boolean testDenyCrud = false;
+
     /**
      * Result of a rate limit check
      */
@@ -34,6 +37,16 @@ public class WebToCaseRateLimiter {
      */
     public static RateLimitResult checkAndIncrement(String origin) {
         Integer rateLimit = DEFAULT_RATE_LIMIT;
+
+        // CRUD checks — fail-open: if we can't access the rate limit object, allow the request
+        Boolean crudDenied = Test.isRunningTest() && testDenyCrud;
+        if (crudDenied ||
+            !Schema.sObjectType.Rate_Limit_Counter__c.isAccessible() ||
+            !Schema.sObjectType.Rate_Limit_Counter__c.isCreateable() ||
+            !Schema.sObjectType.Rate_Limit_Counter__c.isUpdateable()) {
+            System.debug(LoggingLevel.WARN, 'WebToCaseRateLimiter: CRUD denied on Rate_Limit_Counter__c, failing open');
+            return new RateLimitResult(true, 0, rateLimit);
+        }
 
         // Get current hour bucket (truncate to hour)
         DateTime now = DateTime.now();
@@ -128,6 +141,14 @@ public class WebToCaseRateLimiter {
      * Deletes counters older than CLEANUP_HOURS
      */
     public static void cleanupOldCounters() {
+        // CRUD check for delete — skip cleanup silently if denied
+        if ((Test.isRunningTest() && testDenyCrud) ||
+            !Schema.sObjectType.Rate_Limit_Counter__c.isAccessible() ||
+            !Schema.sObjectType.Rate_Limit_Counter__c.isDeletable()) {
+            System.debug(LoggingLevel.WARN, 'WebToCaseRateLimiter: CRUD denied for cleanup');
+            return;
+        }
+
         DateTime cutoff = DateTime.now().addHours(-CLEANUP_HOURS);
 
         List<Rate_Limit_Counter__c> oldCounters = [
@@ -148,6 +169,12 @@ public class WebToCaseRateLimiter {
      * @return Current count for this hour, or 0 if not found
      */
     public static Integer getCurrentCount(String origin) {
+        // CRUD check — return 0 if can't read
+        if ((Test.isRunningTest() && testDenyCrud) ||
+            !Schema.sObjectType.Rate_Limit_Counter__c.isAccessible()) {
+            return 0;
+        }
+
         DateTime now = DateTime.now();
         DateTime hourBucket = DateTime.newInstance(
             now.year(), now.month(), now.day(), now.hour(), 0, 0

@@ -4,6 +4,43 @@ A Salesforce app that lets you create public web forms that submit Cases with fi
 
 ---
 
+## TODO: AppExchange Release Checklist
+
+### Must Do (Before Submission)
+
+- [ ] **Increase test coverage for `WebToCaseNonceService` (51% → 75%+)**
+  - Nonce generation/validation paths, cache fallback scenarios, edge cases
+- [ ] **Increase test coverage for `SetupWizardController` (50% → 75%+)**
+  - Permission checking methods, site detection, sample form creation paths
+- [ ] **Register namespace prefix** (manual step in Salesforce UI)
+  - Go to Setup → Package Manager → Edit → register a namespace prefix
+  - Update `sfdx-project.json` with the namespace
+  - This is a one-time manual step — cannot be scripted
+- [ ] **Create managed package** in packaging org
+  - Add all package components (see "AppExchange Package Metadata" section below)
+  - Exclude org-specific metadata (CORS origins, CSP sites, Sites) — already in `.forceignore`
+- [ ] **Upload package version** and submit for AppExchange security review
+
+### Done (This Session)
+
+- [x] Security fixes deployed (IDOR on `uploadFileChunk`, nonce replay, SOQL injection, chunk validation)
+- [x] `checkUploadStatus` IDOR check added (authorization required before status polling)
+- [x] `authorizeCaseForUpload` made conditional on `Enable_File_Upload__c`
+- [x] SOQL injection false positives resolved (converted dynamic SOQL to static queries)
+- [x] Empty catch blocks fixed (added `System.debug` logging)
+- [x] ESLint violations fixed in `caseFormScript.js` and `caseFormWidget.js`
+- [x] Org-specific metadata removed (CORS origins, CSP trusted sites, Site config)
+- [x] `.forceignore` created to prevent re-pulling org-specific metadata
+- [x] 228/228 tests passing
+
+### Scanner Notes
+
+- **0 Critical/High** violations on custom code (Apex SOQL injection + empty catch blocks fixed, JS ESLint clean)
+- **59 `pmd:ApexCRUDViolation`** remaining — all false positives (PMD can't detect manual `assertAccessible`/`assertCreateable`/`stripInaccessible` enforcement). Won't fail security review.
+- **19 violations** in `imageCompression.js` — third-party minified library, not our code
+
+---
+
 ## 🧪 MANUAL TESTING REQUIRED: Custom HTML Connect Mode + Extended CSS Variables (v0.6.0)
 
 The following items need manual verification in the dev org:
@@ -46,9 +83,9 @@ The following items need manual verification in the dev org:
 
 ## 🧪 MANUAL TESTING REQUIRED: reCAPTCHA Issues
 
-The following reCAPTCHA items need manual verification before release:
+> **Note:** reCAPTCHA UI is hidden for v1 MVP (v0.7.0). These tests apply only after re-enabling for v2.
 
-### reCAPTCHA v3 Testing
+### reCAPTCHA v3 Testing (deferred to v2)
 - [ ] Create reCAPTCHA v3 keys at Google Admin Console (select "v3")
 - [ ] Configure v3 in Setup Wizard (select "v3 Score-based" type)
 - [ ] Test form submission with v3 - verify invisible badge appears
@@ -61,12 +98,12 @@ The following reCAPTCHA items need manual verification before release:
 
 | | |
 |---|---|
-| **Version** | v0.6.3 |
+| **Version** | v0.7.0 |
 | **Phases Complete** | 0-4 (MVP, Admin UI, Setup Wizard, reCAPTCHA, Embeddable Widget) |
-| **Next Up** | Phase 5 (Multi-file upload, custom field types) |
+| **Next Up** | AppExchange v1 submission / Phase 5 |
 | **Dev Org** | `devorg` (tilman.dietrich@gmail.com.dev) |
 | **GitHub** | https://github.com/tilman-d/salesforce-webtocase |
-| **Last Change** | CSS bug fixes, nonce retry, iframe embed support, CORS fix |
+| **Last Change** | v1 MVP: Hide reCAPTCHA from admin UI for AppExchange release |
 
 ---
 
@@ -77,7 +114,7 @@ Salesforce's native Web-to-Case doesn't support file attachments. This app solve
 - Public Visualforce page for form rendering
 - File attachments via ContentVersion/ContentDocumentLink
 - LWC Admin UI for managing forms without using Setup
-- Google reCAPTCHA v2 for spam protection
+- Google reCAPTCHA v2/v3 for spam protection (hidden in v1 MVP, re-enable for v2)
 - Error logging for debugging
 
 ---
@@ -156,22 +193,23 @@ Access via the **Form Manager** tab in Salesforce.
 ### Post-Install Setup Wizard
 Access via the **Setup Wizard** tab or the **Web-to-Case Forms** app in the App Launcher.
 
-**6-Step Wizard Flow:**
+**5-Step Wizard Flow (v1 MVP):**
 1. **Welcome** - Precondition checks (My Domain, admin permissions, Sites enabled)
 2. **Select Site** - Choose from existing Sites or get instructions to create one
 3. **Configure** - Auto-configure Guest User object/field permissions with security acknowledgment
 4. **Verify** - Manual configuration instructions for Apex class and VF page access with validation
-5. **reCAPTCHA** - Configure Google reCAPTCHA API keys (optional, can skip)
-6. **Complete** - Simplified 2-box layout:
+5. **Complete** - Simplified 2-box layout:
    - "Test Your Setup" box: Sample form creation (optional), Test Form button, Public URL with copy
    - "What's Next" box: Link to Form Manager
+
+> **Note:** The reCAPTCHA step (previously step 5) is hidden for v1 MVP. All reCAPTCHA code remains intact — uncomment in `setupWizard.js` to restore the 6-step flow for v2.
 
 **Features:**
 - Automatic detection of active Salesforce Sites
 - One-click permission configuration for Guest User profile
 - Support for both Enhanced Profile UI and Classic Profile UI instructions
 - Validation to ensure all permissions are correctly configured
-- **reCAPTCHA configuration UI** - Enter Site Key and Secret Key without Anonymous Apex
+- **reCAPTCHA configuration UI** - Enter Site Key and Secret Key without Anonymous Apex (hidden in v1 MVP)
 - Sample "Contact Support" form creation
 - Dynamic public URL generation (works with Enhanced Domains)
 
@@ -198,7 +236,10 @@ Access via the **Setup Wizard** tab or the **Web-to-Case Forms** app in the App 
 
 ## What's Built (Phase 3)
 
-### Google reCAPTCHA v2 Integration
+### Google reCAPTCHA v2/v3 Integration
+
+> **v1 MVP Note:** All reCAPTCHA admin UI surfaces are hidden for v1 AppExchange release to reduce onboarding friction and external dependencies. All code remains intact and conditional. See [Re-enabling reCAPTCHA for v2](#re-enabling-recaptcha-for-v2) below.
+
 Protects public forms from spam and bot submissions with "I'm not a robot" checkbox verification.
 
 **Features:**
@@ -484,6 +525,8 @@ If your form uses CAPTCHA, add your embedding domain to Google reCAPTCHA:
 
 ## Manual Testing Checklist (Phase 3)
 
+> **v1 MVP Note:** reCAPTCHA admin UI is hidden in v0.7.0. These tests apply only after re-enabling for v2 (see changelog).
+
 Use this checklist to verify reCAPTCHA integration in your org:
 
 ### 1. Configure reCAPTCHA API Keys
@@ -632,7 +675,9 @@ On the Site detail page → Public Access Settings:
 
 **VF Page Access:** CaseFormPage
 
-### 5. Configure reCAPTCHA (Phase 3)
+### 5. Configure reCAPTCHA (Phase 3) — *Deferred in v1 MVP*
+> reCAPTCHA admin UI is hidden in v0.7.0. To enable, see [Re-enabling reCAPTCHA for v2](#re-enabling-recaptcha-for-v2) in the changelog.
+
 1. Get API keys from [Google reCAPTCHA Admin](https://www.google.com/recaptcha/admin)
 2. Setup → Custom Settings → reCAPTCHA Settings → Manage → New
 3. Enter Site Key and Secret Key
@@ -653,7 +698,7 @@ Access: `https://[your-domain].my.salesforce-sites.com/support/CaseFormPage?name
    - **Success Message**: Shown after submission
    - **Active**: Toggle to enable/disable the form
    - **Enable File Upload**: Allow file attachments
-   - **Enable CAPTCHA**: Require reCAPTCHA verification (Phase 3)
+   - **Enable CAPTCHA**: Require reCAPTCHA verification (Phase 3, hidden in v1 MVP)
 4. Add fields in the **Form Fields** section
 5. Click **Save**
 6. Use **View Live** to preview the form
@@ -678,11 +723,8 @@ force-app/main/default/
 │   └── Web_to_Case_Forms.app-meta.xml   # Phase 2 - Lightning App
 ├── cachePartitions/
 │   └── WebToCase.cachePartition-meta.xml # Platform Cache for nonces
-├── corsWhitelistOrigins/
-│   ├── dietrich_ai.corsWhitelistOrigin-meta.xml
-│   └── dietrich_ai_bare.corsWhitelistOrigin-meta.xml
-├── cspTrustedSites/
-│   └── dietrich_ai.cspTrustedSite-meta.xml  # iframe embed trust
+├── # corsWhitelistOrigins/ — removed (org-specific, excluded via .forceignore)
+├── # cspTrustedSites/ — removed (org-specific, excluded via .forceignore)
 ├── objects/
 │   ├── Form__c/                         # Form configuration
 │   │   └── fields/
@@ -739,8 +781,7 @@ force-app/main/default/
 │   └── imageCompression.js              # browser-image-compression library
 ├── remoteSiteSettings/
 │   └── Google_reCAPTCHA.remoteSite-meta.xml  # Phase 3
-├── sites/
-│   └── Support.site-meta.xml                # Salesforce Site config
+├── # sites/ — removed (org-specific, excluded via .forceignore)
 └── permissionsets/
     └── Web_to_Case_Admin.permissionset-meta.xml
 ```
@@ -781,6 +822,31 @@ force-app/main/default/
 ---
 
 ## Changelog
+
+### v0.7.0 (2026-02-10) - v1 MVP: Hide reCAPTCHA for AppExchange Release
+Hides all reCAPTCHA admin UI surfaces for the v1 AppExchange submission. reCAPTCHA adds onboarding friction (customers must get Google API keys), introduces an external HTTP dependency (complicates security review), and increases support burden. The feature is well-built but not essential for v1. All code remains intact and conditional — `Enable_Captcha__c` defaults to false and all frontend/backend logic is gated on it.
+
+**Changes:**
+- **Setup Wizard** (`setupWizard.js/html`): Reduced from 6 steps to 5 — reCAPTCHA step commented out, Complete step renumbered from 6 to 5. reCAPTCHA status messages hidden on Complete step.
+- **Form Editor** (`formDetail.js/html`): "Enable CAPTCHA" checkbox hidden via `showCaptchaToggle` getter (returns `false`)
+- **Setup Status Dashboard** (`setupStatus.js/html`): reCAPTCHA panel hidden via `showRecaptchaPanel` getter (returns `false`). Dashboard now shows 3 panels: Site, Permissions, URL.
+- **Remote Site Setting** (`Google_reCAPTCHA.remoteSite-meta.xml`): Deactivated (`isActive=false`)
+
+**Not modified** (all remain intact):
+- `CaseFormController.cls` — captcha logic conditional on `Enable_Captcha__c`
+- `WebToCaseRestAPI.cls` — API gates captcha config on the same flag
+- `CaseFormPage.page` — VF rendering conditional on `captchaEnabled`
+- `caseFormScript.js` / `caseFormWidget.js` — JS conditional on `enableCaptcha`
+- `CaseFormControllerTest.cls` — all captcha tests pass (use mocks + explicit `Enable_Captcha__c = true`)
+- `reCAPTCHA_Settings__c` and `Form__c.Enable_Captcha__c` — metadata stays in package
+
+**Re-enabling for v2** — 4 toggles in 4 files, each marked with `v1 MVP` / `v2` comments:
+1. `setupWizard.js` — Uncomment reCAPTCHA step, renumber back to 6 steps
+2. `formDetail.js` — `showCaptchaToggle` returns `true`
+3. `setupStatus.js` — `showRecaptchaPanel` returns `true`
+4. `Google_reCAPTCHA.remoteSite-meta.xml` — `isActive` back to `true`
+
+**Test results:** 227/227 Apex tests passed (100%). Playwright verified: 5 wizard steps, no CAPTCHA toggle in form editor, no reCAPTCHA panel in dashboard, form submission works without captcha (Case 00001114 created).
 
 ### v0.6.3 (2026-02-10) - CSS Bug Fixes, Nonce Retry, iframe Embed Support
 - **6 CSS bug fixes in `caseFormWidget.js`**:
@@ -984,7 +1050,7 @@ force-app/main/default/
 - 88% code coverage on CaseFormController
 
 ### v0.3.0 (2026-01-28) - Phase 2: Setup Wizard
-- 5-step post-install setup wizard (now 6 steps with reCAPTCHA config)
+- 5-step post-install setup wizard (expanded to 6 steps in v0.4.1, reduced back to 5 in v0.7.0)
 - Automatic Guest User permission configuration
 - Site detection and selection
 - Manual configuration instructions (Enhanced + Classic Profile UI)
@@ -1024,21 +1090,22 @@ See the **🧪 MANUAL TESTING REQUIRED** section at the top of this README for t
 
 ## Next Session Starting Point
 
-**Status:** Phases 0-4 complete. v0.6.3 deployed. **Needs manual testing** — see top of README. Ready for Phase 5 after testing.
+**Status:** Phases 0-4 complete. v0.7.0 deployed. reCAPTCHA hidden for v1 MVP AppExchange release. Ready for AppExchange submission or Phase 5.
 
-**Recent changes (v0.6.3):**
+**Recent changes (v0.7.0):**
+- reCAPTCHA hidden from all admin UI for v1 MVP AppExchange release
+- Setup Wizard: 5 steps (was 6) — reCAPTCHA step removed, Complete renumbered
+- Form Editor: "Enable CAPTCHA" checkbox hidden
+- Setup Status Dashboard: reCAPTCHA panel hidden (3 panels: Site, Permissions, URL)
+- Remote Site Setting `Google_reCAPTCHA` deactivated
+- All backend code/tests untouched — 227/227 tests pass
+- 4 files to toggle for v2 re-enablement (each marked with `v1 MVP` comments)
+
+**Previous (v0.6.3):**
 - 6 CSS bug fixes in widget (box-sizing, focus ring colors, disabled opacity, `:host` dead code cleanup)
 - Transparent nonce retry on expired nonces (auto-fetches fresh config and resubmits)
 - iframe embed enabled (AllowAllFraming on Site, CSP trusted site for dietrich.ai)
 - CORS headers sent before error responses in REST API
-- Nonce service: partition-qualified Platform Cache, 128-bit keys to fit 50-char limit
-- Snippet ID collisions fixed in Admin UI Custom HTML tab
-- New metadata: cachePartitions, corsWhitelistOrigins, cspTrustedSites, sites
-
-**Previous (v0.6.2):**
-- `setupStatus` hidden when unconfigured (no more "Setup Not Complete" card)
-- Auto-refresh via LMS when wizard reaches Step 6 — dashboard appears without page reload
-- New `SetupStatusRefresh` Lightning Message Channel for sibling component communication
 
 **File size limits (fixed):**
 | File Type | Limit | Behavior |
@@ -1065,6 +1132,19 @@ sf project deploy start --target-org devorg
 ```
 
 ---
+
+### Re-enabling reCAPTCHA for v2
+
+All reCAPTCHA code is intact and conditional. To re-enable for v2, change 4 toggles in 4 files (each marked with `v1 MVP` / `v2` comments):
+
+| File | Change |
+|------|--------|
+| `setupWizard.js` | Uncomment reCAPTCHA step in `STEPS`, renumber Complete back to `'6'`, restore step logic |
+| `formDetail.js` | Change `showCaptchaToggle` to return `true` |
+| `setupStatus.js` | Change `showRecaptchaPanel` to return `true` |
+| `Google_reCAPTCHA.remoteSite-meta.xml` | Change `<isActive>false</isActive>` to `true` |
+
+Search for `v1 MVP` across the codebase to find all change points.
 
 ### Phase 5 Implementation Ideas
 
@@ -1224,28 +1304,22 @@ When creating the managed/unlocked package for AppExchange, include the followin
 ### Remote Site Settings (1)
 | Remote Site | URL | Description |
 |-------------|-----|-------------|
-| Google_reCAPTCHA | `https://www.google.com` | reCAPTCHA verification API |
+| Google_reCAPTCHA | `https://www.google.com` | reCAPTCHA verification API (deactivated in v1 MVP) |
 
 ### Platform Cache Partitions (1)
 | Partition | API Name | Description |
 |-----------|----------|-------------|
 | WebToCase | `WebToCase` | Stores one-time nonces for replay attack prevention (15-min TTL) |
 
-### CORS Whitelist Origins (2)
-| Origin | API Name | Description |
-|--------|----------|-------------|
-| dietrich.ai (https) | `dietrich_ai` | Allow cross-origin requests from dietrich.ai |
-| dietrich.ai (bare) | `dietrich_ai_bare` | Allow cross-origin requests from dietrich.ai (http) |
+### Org-Specific Metadata (Excluded from Package)
 
-### CSP Trusted Sites (1)
-| Site | API Name | Description |
-|------|----------|-------------|
-| dietrich.ai | `dietrich_ai` | Allow dietrich.ai to embed Salesforce pages in iframes |
+The following metadata types are org-specific and should NOT be included in the managed package. Customers configure their own via Salesforce Setup:
 
-### Custom Sites (1)
-| Site | API Name | Description |
-|------|----------|-------------|
-| Support | `Support` | Salesforce Site for public form access (AllowAllFraming for iframe embed) |
+- **CORS Whitelist Origins** — customers add their own domains
+- **CSP Trusted Sites** — customers add their own domains
+- **Custom Sites** — customers create their own Site
+
+These are excluded via `.forceignore`.
 
 ### Package.xml Example
 
@@ -1329,19 +1403,7 @@ When creating the managed/unlocked package for AppExchange, include the followin
         <members>WebToCase</members>
         <name>PlatformCachePartition</name>
     </types>
-    <types>
-        <members>dietrich_ai</members>
-        <members>dietrich_ai_bare</members>
-        <name>CorsWhitelistOrigin</name>
-    </types>
-    <types>
-        <members>dietrich_ai</members>
-        <name>CspTrustedSite</name>
-    </types>
-    <types>
-        <members>Support</members>
-        <name>CustomSite</name>
-    </types>
+    <!-- CORS, CSP, and Sites are org-specific — excluded from package -->
     <version>59.0</version>
 </Package>
 ```
@@ -1350,20 +1412,20 @@ When creating the managed/unlocked package for AppExchange, include the followin
 
 1. **Custom Setting**: `reCAPTCHA_Settings__c` is a Protected Hierarchy Custom Setting. The records themselves (API keys) are NOT included - users configure these post-install via Setup Wizard.
 
-2. **Remote Site Setting**: Include `Google_reCAPTCHA` for reCAPTCHA verification callouts.
+2. **Remote Site Setting**: Include `Google_reCAPTCHA` for reCAPTCHA verification callouts (deactivated in v1 MVP — included in package but inactive).
 
 3. **Permission Set**: `Web_to_Case_Admin` grants access to all admin functionality. Assign to users who need to manage forms.
 
 4. **Post-Install Configuration Required**:
    - Create/select a Salesforce Site
    - Configure Guest User permissions (via Setup Wizard)
-   - Add reCAPTCHA API keys (via Setup Wizard)
    - Grant Apex class and VF page access to Guest User profile
+   - (v2 only) Add reCAPTCHA API keys via Setup Wizard
 
-5. **Test Coverage**: All Apex classes have >75% code coverage with dedicated test classes.
+5. **Test Coverage**: Most Apex classes have >75% code coverage. `WebToCaseNonceService` (51%) and `SetupWizardController` (50%) need additional tests before submission.
 
 6. **Platform Cache**: The `WebToCase` cache partition is required for nonce-based replay attack prevention. The org must have Platform Cache allocated (at least session cache).
 
-7. **CORS & CSP**: The `corsWhitelistOrigins` and `cspTrustedSites` entries are org-specific (dietrich.ai). For the AppExchange package, these should be excluded — customers configure their own domains via Salesforce Setup.
+7. **CORS, CSP & Sites**: Org-specific metadata (CORS origins, CSP trusted sites, Site config) has been removed from the project and excluded via `.forceignore`. Customers configure their own domains post-install.
 
-8. **Site Metadata**: The `Support` site metadata includes `AllowAllFraming` for iframe embed support. Customers using iframe embed mode need this setting on their Site.
+8. **Site Metadata**: Customers using iframe embed mode need `AllowAllFraming` on their Site (documented in post-install Setup Wizard).

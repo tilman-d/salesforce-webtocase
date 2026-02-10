@@ -30,6 +30,50 @@ global without sharing class CaseFormController {
     // 3 chunks * 750KB = 2.25MB max for synchronous path.
     private static final Integer SYNC_CHUNK_LIMIT = 3;
 
+    // Test-visible flag to simulate CRUD denial in tests
+    @TestVisible private static Boolean testDenyCrud = false;
+
+    /**
+     * Custom exception for security/CRUD violations
+     */
+    public class SecurityException extends Exception {}
+
+    /**
+     * Assert that the running user has create access to the given SObject type
+     */
+    private static void assertCreateable(Schema.SObjectType sot, String label) {
+        if (Test.isRunningTest() && testDenyCrud) {
+            throw new SecurityException('Insufficient permissions to create ' + label);
+        }
+        if (!sot.getDescribe().isCreateable()) {
+            throw new SecurityException('Insufficient permissions to create ' + label);
+        }
+    }
+
+    /**
+     * Assert that the running user has read access to the given SObject type
+     */
+    private static void assertAccessible(Schema.SObjectType sot, String label) {
+        if (Test.isRunningTest() && testDenyCrud) {
+            throw new SecurityException('Insufficient permissions to read ' + label);
+        }
+        if (!sot.getDescribe().isAccessible()) {
+            throw new SecurityException('Insufficient permissions to read ' + label);
+        }
+    }
+
+    /**
+     * Assert that the running user has delete access to the given SObject type
+     */
+    private static void assertDeletable(Schema.SObjectType sot, String label) {
+        if (Test.isRunningTest() && testDenyCrud) {
+            throw new SecurityException('Insufficient permissions to delete ' + label);
+        }
+        if (!sot.getDescribe().isDeletable()) {
+            throw new SecurityException('Insufficient permissions to delete ' + label);
+        }
+    }
+
     /**
      * Constructor - loads form based on URL parameter
      */
@@ -40,7 +84,8 @@ global without sharing class CaseFormController {
             formName = ApexPages.currentPage().getParameters().get('form');
         }
         // Check for preview mode
-        isPreviewMode = ApexPages.currentPage().getParameters().get('preview') == 'true';
+        isPreviewMode = ApexPages.currentPage().getParameters().get('preview') == 'true'
+                        && UserInfo.getUserType() != 'Guest';
         // Check for embed mode
         isEmbedMode = ApexPages.currentPage().getParameters().get('embed') == '1';
         loadForm();
@@ -55,16 +100,31 @@ global without sharing class CaseFormController {
         }
 
         try {
-            // In preview mode, allow inactive forms for admin testing
-            String query = 'SELECT Id, Form_Name__c, Title__c, Description__c, ' +
-                          'Success_Message__c, Active__c, Enable_File_Upload__c, ' +
-                          'Max_File_Size_MB__c, Enable_Captcha__c FROM Form__c WHERE Form_Name__c = :formName';
-            if (!isPreviewMode) {
-                query += ' AND Active__c = true';
-            }
-            query += ' LIMIT 1';
+            // CRUD checks for form configuration queries
+            assertAccessible(Form__c.SObjectType, 'Form__c');
+            assertAccessible(Form_Field__c.SObjectType, 'Form_Field__c');
 
-            List<Form__c> forms = Database.query(query);
+            // In preview mode, allow inactive forms for admin testing
+            List<Form__c> forms;
+            if (isPreviewMode) {
+                forms = [
+                    SELECT Id, Form_Name__c, Title__c, Description__c,
+                           Success_Message__c, Active__c, Enable_File_Upload__c,
+                           Max_File_Size_MB__c, Enable_Captcha__c
+                    FROM Form__c
+                    WHERE Form_Name__c = :formName
+                    LIMIT 1
+                ];
+            } else {
+                forms = [
+                    SELECT Id, Form_Name__c, Title__c, Description__c,
+                           Success_Message__c, Active__c, Enable_File_Upload__c,
+                           Max_File_Size_MB__c, Enable_Captcha__c
+                    FROM Form__c
+                    WHERE Form_Name__c = :formName AND Active__c = true
+                    LIMIT 1
+                ];
+            }
 
             if (!forms.isEmpty()) {
                 form = forms[0];
@@ -130,6 +190,11 @@ global without sharing class CaseFormController {
         Map<String, Object> result = new Map<String, Object>();
 
         try {
+            // CRUD checks
+            assertAccessible(Form__c.SObjectType, 'Form__c');
+            assertAccessible(Case.SObjectType, 'Case');
+            assertCreateable(Case.SObjectType, 'Case');
+
             // Validate form exists and is active
             List<Form__c> forms = [
                 SELECT Id, Form_Name__c, Enable_File_Upload__c, Max_File_Size_MB__c, Enable_Captcha__c,
@@ -255,6 +320,12 @@ global without sharing class CaseFormController {
                 }
             }
 
+            // FLS enforcement: strip inaccessible fields before Case insert
+            SObjectAccessDecision caseDecision = Security.stripInaccessible(
+                AccessType.CREATABLE, new List<Case>{ newCase }
+            );
+            newCase = (Case) caseDecision.getRecords()[0];
+
             // Insert with DML retry: if defaults cause a DML failure (e.g., invalid
             // picklist value), build a fresh Case without defaults and retry once.
             // This ensures stale/invalid picklist values never block case creation.
@@ -281,11 +352,21 @@ global without sharing class CaseFormController {
                             }
                         }
                     }
+                    // FLS enforcement on retry Case
+                    SObjectAccessDecision retryDecision = Security.stripInaccessible(
+                        AccessType.CREATABLE, new List<Case>{ retryCase }
+                    );
+                    retryCase = (Case) retryDecision.getRecords()[0];
                     insert retryCase;
                     newCase = retryCase;
                 } else {
                     throw dmlEx;
                 }
+            }
+
+            // Authorize this Case for chunked file uploads (only if file upload is enabled)
+            if (form.Enable_File_Upload__c) {
+                WebToCaseNonceService.authorizeCaseForUpload(newCase.Id);
             }
 
             // Attach file if provided and file upload is enabled
@@ -302,6 +383,12 @@ global without sharing class CaseFormController {
                     result.put('warning', 'File was too large and was not attached.');
                     return result;
                 }
+
+                // CRUD checks for file attachment (object-level only; no stripInaccessible
+                // on ContentVersion — required fields like VersionData would be stripped)
+                assertAccessible(ContentVersion.SObjectType, 'ContentVersion');
+                assertCreateable(ContentVersion.SObjectType, 'ContentVersion');
+                assertCreateable(ContentDocumentLink.SObjectType, 'ContentDocumentLink');
 
                 // Create ContentVersion (file)
                 ContentVersion cv = new ContentVersion();
@@ -333,12 +420,14 @@ global without sharing class CaseFormController {
             result.put('caseNumber', createdCase.CaseNumber);
             result.put('caseId', newCase.Id); // Return caseId for chunked file uploads
 
+        } catch (SecurityException se) {
+            ErrorLogger.log('CRUD/FLS violation in submitForm: ' + se.getMessage(), se.getStackTraceString(), formId);
+            result.put('success', false);
+            result.put('error', 'Insufficient permissions. Please contact your administrator.');
         } catch (Exception e) {
             ErrorLogger.logException(e, formId);
             result.put('success', false);
             result.put('error', 'An error occurred while submitting your request. Please try again.');
-            // In debug mode, we could return more details
-            // result.put('debugError', e.getMessage());
         }
 
         return result;
@@ -377,6 +466,10 @@ global without sharing class CaseFormController {
                 return result;
             }
 
+            // CRUD checks for chunk upload
+            assertAccessible(Case.SObjectType, 'Case');
+            assertCreateable(ContentVersion.SObjectType, 'ContentVersion');
+
             // Validate individual chunk size (prevent oversized chunks that bypass file size estimation)
             // Base64 encodes 3 bytes into 4 chars, so CHUNK_SIZE bytes = ceil(CHUNK_SIZE/3)*4 base64 chars
             // Allow 10% margin for padding: max base64 length = CHUNK_SIZE * 4/3 + 100
@@ -396,6 +489,13 @@ global without sharing class CaseFormController {
             if (cases.isEmpty()) {
                 result.put('success', false);
                 result.put('error', 'Case not found.');
+                return result;
+            }
+
+            // IDOR protection: verify this Case was created through submitForm
+            if (!WebToCaseNonceService.isCaseAuthorizedForUpload(caseId)) {
+                result.put('success', false);
+                result.put('error', 'Upload not authorized for this case.');
                 return result;
             }
 
@@ -446,6 +546,10 @@ global without sharing class CaseFormController {
                 result.put('chunkReceived', chunkIndex);
             }
 
+        } catch (SecurityException se) {
+            ErrorLogger.log('CRUD/FLS violation in uploadFileChunk: ' + se.getMessage(), se.getStackTraceString(), caseId);
+            result.put('success', false);
+            result.put('error', 'Insufficient permissions. Please contact your administrator.');
         } catch (Exception e) {
             ErrorLogger.logException(e, caseId);
             result.put('success', false);
@@ -470,6 +574,13 @@ global without sharing class CaseFormController {
      */
     private static void assembleSynchronous(String caseId, String uploadKey, String fileName,
                                              Integer totalChunks, Map<String, Object> result) {
+        // CRUD checks for assembly operations
+        assertAccessible(ContentDocumentLink.SObjectType, 'ContentDocumentLink');
+        assertAccessible(ContentVersion.SObjectType, 'ContentVersion');
+        assertCreateable(ContentVersion.SObjectType, 'ContentVersion');
+        assertCreateable(ContentDocumentLink.SObjectType, 'ContentDocumentLink');
+        assertDeletable(ContentDocument.SObjectType, 'ContentDocument');
+
         // Query chunk IDs first (without loading blob data into heap)
         List<ContentDocumentLink> links = [
             SELECT ContentDocumentId
@@ -585,6 +696,18 @@ global without sharing class CaseFormController {
         Map<String, Object> result = new Map<String, Object>();
 
         try {
+            // CRUD checks for status queries
+            assertAccessible(ContentDocumentLink.SObjectType, 'ContentDocumentLink');
+            assertAccessible(ContentVersion.SObjectType, 'ContentVersion');
+            assertAccessible(Error_Log__c.SObjectType, 'Error_Log__c');
+
+            // IDOR check: ensure this Case was created through submitForm
+            if (!WebToCaseNonceService.isCaseAuthorizedForUpload(caseId)) {
+                result.put('status', 'error');
+                result.put('error', 'Upload not authorized for this case.');
+                return result;
+            }
+
             // Query ContentDocumentLinks for this Case
             List<ContentDocumentLink> links = [
                 SELECT ContentDocumentId

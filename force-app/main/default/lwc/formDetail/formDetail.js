@@ -303,6 +303,9 @@ export default class FormDetail extends LightningElement {
         this.hasUnsavedChanges = true;
     }
 
+    // v1 MVP: set to true for v2
+    get showCaptchaToggle() { return false; }
+
     handleCaptchaChange(event) {
         this.form.enableCaptcha = event.target.checked;
         this.hasUnsavedChanges = true;

@@ -212,6 +212,38 @@ private class FileAssemblyQueueableTest {
     }
 
     /**
+     * Test that assembly aborts gracefully when CRUD is denied
+     */
+    @isTest
+    static void testAssemblyAbortedWhenCrudDenied() {
+        Case testCase = createTestCase();
+        String fileName = 'crud-denied-test.txt';
+
+        List<String> chunkContents = new List<String>{ 'aaa', 'bbb', 'ccc', 'ddd' };
+        String uploadKey = createChunks(testCase.Id, fileName, chunkContents);
+
+        FileAssemblyQueueable.testDenyCrud = true;
+
+        Test.startTest();
+        System.enqueueJob(new FileAssemblyQueueable(testCase.Id, uploadKey, fileName, 4));
+        Test.stopTest();
+
+        // Verify no final file was created (assembly should have aborted)
+        List<ContentDocumentLink> cdls = [
+            SELECT ContentDocumentId FROM ContentDocumentLink WHERE LinkedEntityId = :testCase.Id
+        ];
+        Set<Id> docIds = new Set<Id>();
+        for (ContentDocumentLink cdl : cdls) {
+            docIds.add(cdl.ContentDocumentId);
+        }
+        List<ContentVersion> finalFiles = [
+            SELECT Id FROM ContentVersion
+            WHERE ContentDocumentId IN :docIds AND Title = :fileName AND IsLatest = true
+        ];
+        System.assertEquals(0, finalFiles.size(), 'No final file should exist when CRUD denied');
+    }
+
+    /**
      * Test assembly with no existing links on Case (edge case)
      */
     @isTest

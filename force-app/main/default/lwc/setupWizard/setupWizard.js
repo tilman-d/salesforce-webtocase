@@ -18,8 +18,9 @@ const STEPS = [
     { label: 'Select Site', value: '2' },
     { label: 'Configure', value: '3' },
     { label: 'Verify', value: '4' },
-    { label: 'reCAPTCHA', value: '5' },
-    { label: 'Complete', value: '6' }
+    // v1 MVP: reCAPTCHA step hidden — uncomment for v2
+    // { label: 'reCAPTCHA', value: '5' },
+    { label: 'Complete', value: '5' }
 ];
 
 export default class SetupWizard extends LightningElement {
@@ -80,9 +81,8 @@ export default class SetupWizard extends LightningElement {
                 return this.autoConfigComplete === true;
             case 4:
                 return this.validationPassed === true;
+            // v1 MVP: case 5 was reCAPTCHA (optional) — renumbered for v2
             case 5:
-                return true; // reCAPTCHA is optional
-            case 6:
                 return true; // Final step
             default:
                 return false;
@@ -121,11 +121,11 @@ export default class SetupWizard extends LightningElement {
     }
 
     get isStep5() {
-        return this.currentStep === '5';
+        return this.currentStep === '5'; // v1 MVP: now maps to Complete step
     }
 
     get isStep6() {
-        return this.currentStep === '6';
+        return false; // v1 MVP: always false — kept for v2 re-enablement
     }
 
     get canGoBack() {
@@ -142,27 +142,25 @@ export default class SetupWizard extends LightningElement {
                 return this.autoConfigComplete;
             case '4':
                 return this.validationPassed;
-            case '5':
-                // reCAPTCHA step - can always proceed (skip or configure)
-                return true;
+            // v1 MVP: case '5' was reCAPTCHA — removed for v2
             default:
                 return false;
         }
     }
 
     get nextButtonLabel() {
-        if (this.currentStep === '5') {
+        if (this.currentStep === '4') { // v1 MVP: was '5' — update for v2
             return 'Finish';
         }
         return 'Next';
     }
 
     get showBackButton() {
-        return this.currentStepNumber > 1 && this.currentStepNumber < 6;
+        return this.currentStepNumber > 1 && this.currentStepNumber < 5; // v1 MVP: was < 6
     }
 
     get showNextButton() {
-        return this.currentStepNumber < 6;
+        return this.currentStepNumber < 5; // v1 MVP: was < 6
     }
 
     get hasSites() {
@@ -497,9 +495,8 @@ export default class SetupWizard extends LightningElement {
             await this.loadSites();
         } else if (targetStep === 4) {
             await this.loadValidation();
+        // v1 MVP: targetStep === 5 was loadRecaptchaSettings — removed for v2
         } else if (targetStep === 5) {
-            await this.loadRecaptchaSettings();
-        } else if (targetStep === 6) {
             await this.loadPublicUrl();
         }
     }
@@ -529,14 +526,11 @@ export default class SetupWizard extends LightningElement {
             this.currentStep = '4';
             await this.loadValidation();
         } else if (step === 4) {
-            // Moving from Verify to reCAPTCHA
+            // v1 MVP: skip reCAPTCHA, go directly to Complete
             this.currentStep = '5';
-            await this.loadRecaptchaSettings();
-        } else if (step === 5) {
-            // Moving from reCAPTCHA to Complete
-            this.currentStep = '6';
             await this.loadPublicUrl();
             publish(this.messageContext, SETUP_STATUS_REFRESH, {});
+            // v1 MVP: old step === 5 (reCAPTCHA → Complete) removed — restore for v2
         }
     }
 

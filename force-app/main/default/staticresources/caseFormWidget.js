@@ -1,3 +1,5 @@
+/* global grecaptcha, imageCompression */
+/* eslint @lwc/lwc/no-inner-html: "off", no-prototype-builtins: "off" */
 /**
  * Web-to-Case Embeddable Widget
  * Renders a case submission form with Shadow DOM isolation
@@ -115,7 +117,6 @@
          * Fetch form configuration from REST API
          */
         fetchFormConfig: function() {
-            var self = this;
             var url = this.options.apiBase + '/webtocase/v1/form/' + encodeURIComponent(this.options.formName);
 
             return fetch(url, {
@@ -155,7 +156,6 @@
          * Render the form
          */
         render: function() {
-            var self = this;
             var config = this.formConfig;
 
             // Build HTML
@@ -285,8 +285,6 @@
          * Load external dependencies (CAPTCHA, image compression)
          */
         loadDependencies: function() {
-            var self = this;
-
             // Load image compression if file upload is enabled
             if (this.formConfig.enableFileUpload) {
                 this.loadImageCompression();
@@ -585,13 +583,13 @@
                                 .then(function(base64) {
                                     self.submitForm(fieldValues, fileName, base64, captchaToken);
                                 })
-                                .catch(function(err) {
+                                .catch(function() {
                                     self.setLoading(false);
                                     self.showFormError('Error reading file.');
                                 });
                         }
                     })
-                    .catch(function(err) {
+                    .catch(function() {
                         self.setLoading(false);
                         self.showFormError('Error processing file.');
                     });
@@ -720,7 +718,7 @@
                     self.refreshNonce(); // Get new nonce for retry
                 }
             })
-            .catch(function(err) {
+            .catch(function() {
                 self.setLoading(false);
                 self.showFormError('Network error. Please try again.');
                 self.resetCaptcha();
@@ -805,7 +803,7 @@
                     self.showFormError('File upload failed: ' + (result.error || 'Unknown error'));
                 }
             })
-            .catch(function(err) {
+            .catch(function() {
                 self.setLoading(false);
                 self.showSuccess(caseNumber);
                 self.showFormError('File upload failed.');

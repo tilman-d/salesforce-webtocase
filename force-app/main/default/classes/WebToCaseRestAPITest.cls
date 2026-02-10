@@ -257,7 +257,7 @@ private class WebToCaseRestAPITest {
                 new List<String>{'Subject', 'Description'}
             );
             System.assertNotEquals(null, nonce, 'Nonce should be generated');
-            System.assertEquals(64, nonce.length(), 'Nonce should be 64 chars (hex of 256-bit)');
+            System.assertEquals(32, nonce.length(), 'Nonce should be 32 chars (hex of 128-bit AES key)');
         } catch (WebToCaseNonceService.NonceException e) {
             // Expected if Platform Cache is not configured
             System.assert(e.getMessage().contains('Server configuration'), 'Should be cache config error');
@@ -651,6 +651,7 @@ private class WebToCaseRestAPITest {
         // Create a Case and a completed file on it
         Case testCase = new Case(Subject = 'Status Test', Status = 'New');
         insert testCase;
+        WebToCaseNonceService.authorizeCaseForUpload(testCase.Id);
 
         ContentVersion cv = new ContentVersion();
         cv.Title = 'completed-file.pdf';
@@ -733,6 +734,30 @@ private class WebToCaseRestAPITest {
 
         RestResponse res = RestContext.response;
         System.assertEquals(403, res.statusCode, 'Should return 403 for unauthorized origin');
+    }
+
+    // ==================== CRUD Denial Tests ====================
+
+    @isTest
+    static void testGetFormConfigNoCrudAccess() {
+        RestRequest req = new RestRequest();
+        req.requestURI = '/services/apexrest/webtocase/v1/form/embed-test-form';
+        req.httpMethod = 'GET';
+        req.headers.put('Origin', 'https://example.com');
+        RestContext.request = req;
+        RestContext.response = new RestResponse();
+
+        WebToCaseRestAPI.testDenyCrud = true;
+
+        Test.startTest();
+        WebToCaseRestAPI.getFormConfig();
+        Test.stopTest();
+
+        RestResponse res = RestContext.response;
+        System.assertEquals(403, res.statusCode, 'Should return 403 when CRUD denied');
+        Map<String, Object> response = (Map<String, Object>) JSON.deserializeUntyped(res.responseBody.toString());
+        System.assert(((String)response.get('error')).contains('permissions'),
+            'Error should mention permissions');
     }
 
     // ==================== FormAdminController Allowed Domains Test ====================

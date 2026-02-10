@@ -18,6 +18,9 @@ public class FileAssemblyQueueable implements Queueable {
     private String fileName;
     private Integer totalChunks;
 
+    // Test-visible flag to simulate CRUD denial in tests
+    @TestVisible private static Boolean testDenyCrud = false;
+
     public FileAssemblyQueueable(String caseId, String uploadKey, String fileName, Integer totalChunks) {
         this.caseId = caseId;
         // Sanitize uploadKey: strip double-underscores to prevent title parsing issues
@@ -28,6 +31,30 @@ public class FileAssemblyQueueable implements Queueable {
 
     public void execute(QueueableContext context) {
         try {
+            // CRUD checks for assembly operations (object-level only; no stripInaccessible
+            // on ContentVersion — required fields like VersionData would be stripped)
+            Boolean crudDenied = Test.isRunningTest() && testDenyCrud;
+            if (crudDenied || !Schema.sObjectType.ContentDocumentLink.isAccessible()) {
+                ErrorLogger.log('FileAssemblyQueueable: No read access to ContentDocumentLink', null, caseId);
+                return;
+            }
+            if (crudDenied || !Schema.sObjectType.ContentVersion.isAccessible()) {
+                ErrorLogger.log('FileAssemblyQueueable: No read access to ContentVersion', null, caseId);
+                return;
+            }
+            if (crudDenied || !Schema.sObjectType.ContentVersion.isCreateable()) {
+                ErrorLogger.log('FileAssemblyQueueable: No create access to ContentVersion', null, caseId);
+                return;
+            }
+            if (crudDenied || !Schema.sObjectType.ContentDocumentLink.isCreateable()) {
+                ErrorLogger.log('FileAssemblyQueueable: No create access to ContentDocumentLink', null, caseId);
+                return;
+            }
+            if (crudDenied || !Schema.sObjectType.ContentDocument.isDeletable()) {
+                ErrorLogger.log('FileAssemblyQueueable: No delete access to ContentDocument', null, caseId);
+                return;
+            }
+
             // Idempotency guard: check if final file already exists on this Case
             List<ContentDocumentLink> existingLinks = [
                 SELECT ContentDocumentId

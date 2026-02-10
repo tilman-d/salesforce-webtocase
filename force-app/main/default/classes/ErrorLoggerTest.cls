@@ -103,6 +103,24 @@ private class ErrorLoggerTest {
     /**
      * Test logging with very long message (should truncate gracefully)
      */
+    /**
+     * Test that ErrorLogger fails silently when CRUD access is denied
+     */
+    @isTest
+    static void testLogFailsSilentlyWithoutCrud() {
+        ErrorLogger.testDenyCrud = true;
+
+        Test.startTest();
+        ErrorLogger.log('Should not be saved', 'Stack trace', 'formId');
+        Test.stopTest();
+
+        List<Error_Log__c> logs = [SELECT Id FROM Error_Log__c];
+        System.assertEquals(0, logs.size(), 'No error log should be created when CRUD is denied');
+    }
+
+    /**
+     * Test logging with very long message (should truncate gracefully)
+     */
     @isTest
     static void testLogLongMessage() {
         String longMessage = '';

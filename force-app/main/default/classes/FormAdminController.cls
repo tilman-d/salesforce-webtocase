@@ -124,6 +124,9 @@ public with sharing class FormAdminController {
         }
     }
 
+    // Test-visible flag to simulate CRUD denial in tests
+    @TestVisible private static Boolean testDenyCrud = false;
+
     /**
      * Helper method to create AuraHandledException with proper message
      */
@@ -134,10 +137,44 @@ public with sharing class FormAdminController {
     }
 
     /**
+     * Check CRUD access for the given SObject type and operation.
+     * Throws AuraHandledException if access is denied.
+     */
+    private static void checkCrudAccess(Schema.SObjectType sot, String operation) {
+        Boolean denied = Test.isRunningTest() && testDenyCrud;
+        String label = sot.getDescribe().getLabel();
+
+        if (operation == 'read') {
+            if (denied || !sot.getDescribe().isAccessible()) {
+                throw createException('You do not have permission to read ' + label);
+            }
+        } else if (operation == 'create') {
+            if (denied || !sot.getDescribe().isCreateable()) {
+                throw createException('You do not have permission to create ' + label);
+            }
+        } else if (operation == 'update') {
+            if (denied || !sot.getDescribe().isUpdateable()) {
+                throw createException('You do not have permission to update ' + label);
+            }
+        } else if (operation == 'delete') {
+            if (denied || !sot.getDescribe().isDeletable()) {
+                throw createException('You do not have permission to delete ' + label);
+            }
+        } else if (operation == 'upsert') {
+            if (denied || !sot.getDescribe().isCreateable() || !sot.getDescribe().isUpdateable()) {
+                throw createException('You do not have permission to create/update ' + label);
+            }
+        }
+    }
+
+    /**
      * Get all forms with field counts
      */
     @AuraEnabled(cacheable=true)
     public static List<FormWrapper> getForms() {
+        checkCrudAccess(Form__c.SObjectType, 'read');
+        checkCrudAccess(Form_Field__c.SObjectType, 'read');
+
         List<FormWrapper> wrappers = new List<FormWrapper>();
 
         // Query forms with aggregate count of fields
@@ -163,6 +200,9 @@ public with sharing class FormAdminController {
             FROM Form__c
             ORDER BY CreatedDate DESC
         ];
+
+        // FLS enforcement
+        forms = (List<Form__c>) Security.stripInaccessible(AccessType.READABLE, forms).getRecords();
 
         for (Form__c form : forms) {
             if (String.isNotBlank(form.Site_Id__c)) {
@@ -205,6 +245,9 @@ public with sharing class FormAdminController {
             throw createException('Form ID is required');
         }
 
+        checkCrudAccess(Form__c.SObjectType, 'read');
+        checkCrudAccess(Form_Field__c.SObjectType, 'read');
+
         List<Form__c> forms = [
             SELECT Id, Form_Name__c, Title__c, Description__c, Active__c,
                    Enable_File_Upload__c, Max_File_Size_MB__c, Success_Message__c, Enable_Captcha__c,
@@ -218,7 +261,8 @@ public with sharing class FormAdminController {
             throw createException('Form not found');
         }
 
-        Form__c form = forms[0];
+        // FLS enforcement
+        Form__c form = (Form__c) Security.stripInaccessible(AccessType.READABLE, forms).getRecords()[0];
         FormWrapper wrapper = new FormWrapper(form, 0);
 
         // Compute public URL
@@ -240,6 +284,9 @@ public with sharing class FormAdminController {
             ORDER BY Sort_Order__c ASC NULLS LAST
         ];
 
+        // FLS enforcement
+        fields = (List<Form_Field__c>) Security.stripInaccessible(AccessType.READABLE, fields).getRecords();
+
         wrapper.fieldCount = fields.size();
         for (Form_Field__c field : fields) {
             wrapper.fields.add(new FieldWrapper(field));
@@ -256,6 +303,8 @@ public with sharing class FormAdminController {
         if (formData == null || formData.isEmpty()) {
             throw createException('Form data is required');
         }
+
+        checkCrudAccess(Form__c.SObjectType, 'upsert');
 
         String formId = (String)formData.get('id');
         String formName = (String)formData.get('formName');
@@ -334,6 +383,13 @@ public with sharing class FormAdminController {
         }
 
         try {
+            // FLS enforcement: strip inaccessible fields before DML.
+            // Re-set Id after strip since stripInaccessible clears it.
+            Id savedId = form.Id;
+            form = (Form__c) Security.stripInaccessible(AccessType.UPSERTABLE, new List<Form__c>{ form }).getRecords()[0];
+            if (savedId != null) {
+                form.Id = savedId;
+            }
             upsert form;
             return form.Id;
         } catch (DmlException e) {
@@ -349,6 +405,8 @@ public with sharing class FormAdminController {
         if (String.isBlank(formId)) {
             throw createException('Form ID is required');
         }
+
+        checkCrudAccess(Form__c.SObjectType, 'delete');
 
         try {
             delete new Form__c(Id = formId);
@@ -366,6 +424,8 @@ public with sharing class FormAdminController {
             throw createException('Form ID is required');
         }
 
+        checkCrudAccess(Form__c.SObjectType, 'update');
+
         try {
             update new Form__c(Id = formId, Active__c = active);
         } catch (DmlException e) {
@@ -381,6 +441,9 @@ public with sharing class FormAdminController {
         if (String.isBlank(formId)) {
             throw createException('Form ID is required');
         }
+
+        checkCrudAccess(Form_Field__c.SObjectType, 'upsert');
+        checkCrudAccess(Form_Field__c.SObjectType, 'delete');
 
         if (fields == null) {
             fields = new List<Object>();
@@ -443,6 +506,29 @@ public with sharing class FormAdminController {
                 delete fieldsToDelete;
             }
             if (!fieldsToUpsert.isEmpty()) {
+                // FLS enforcement: strip inaccessible fields before DML.
+                // Preserve Id and Form__c lookup since stripInaccessible clears them.
+                // Form__c is a master-detail (required) field that is always writable
+                // if the user has create access to the object.
+                Map<Integer, Id> idMap = new Map<Integer, Id>();
+                Map<Integer, Id> formLookupMap = new Map<Integer, Id>();
+                for (Integer i = 0; i < fieldsToUpsert.size(); i++) {
+                    if (fieldsToUpsert[i].Id != null) {
+                        idMap.put(i, fieldsToUpsert[i].Id);
+                    }
+                    if (fieldsToUpsert[i].Form__c != null) {
+                        formLookupMap.put(i, fieldsToUpsert[i].Form__c);
+                    }
+                }
+                fieldsToUpsert = (List<Form_Field__c>) Security.stripInaccessible(
+                    AccessType.UPSERTABLE, fieldsToUpsert
+                ).getRecords();
+                for (Integer idx : idMap.keySet()) {
+                    fieldsToUpsert[idx].Id = idMap.get(idx);
+                }
+                for (Integer idx : formLookupMap.keySet()) {
+                    fieldsToUpsert[idx].Form__c = formLookupMap.get(idx);
+                }
                 upsert fieldsToUpsert;
             }
         } catch (DmlException e) {
@@ -459,6 +545,8 @@ public with sharing class FormAdminController {
             throw createException('Field ID is required');
         }
 
+        checkCrudAccess(Form_Field__c.SObjectType, 'delete');
+
         try {
             delete new Form_Field__c(Id = fieldId);
         } catch (DmlException e) {
@@ -474,6 +562,8 @@ public with sharing class FormAdminController {
         if (String.isBlank(formName)) {
             return false;
         }
+
+        checkCrudAccess(Form__c.SObjectType, 'read');
 
         String query = 'SELECT Id FROM Form__c WHERE Form_Name__c = :formName';
         List<Form__c> existing;
@@ -531,7 +621,7 @@ public with sharing class FormAdminController {
                 sites.add(new SiteInfo(s, baseUrl));
             }
         } catch (Exception e) {
-            // If Sites feature is not enabled or query fails, return empty list
+            System.debug(LoggingLevel.WARN, 'Unable to query Sites: ' + e.getMessage());
         }
 
         return sites;
@@ -551,7 +641,7 @@ public with sharing class FormAdminController {
                 result.put('baseUrl', settings.Default_Site_Base_Url__c);
             }
         } catch (Exception e) {
-            // Return empty map on error
+            System.debug(LoggingLevel.WARN, 'Unable to get default site info: ' + e.getMessage());
         }
 
         return result;
@@ -571,7 +661,7 @@ public with sharing class FormAdminController {
                 return details[0].SecureUrl;
             }
         } catch (Exception e) {
-            // Return null on error
+            System.debug(LoggingLevel.WARN, 'Unable to get site base URL: ' + e.getMessage());
         }
         return null;
     }

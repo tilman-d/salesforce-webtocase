@@ -392,8 +392,8 @@
                 </div>
             </template>
 
-            <!-- Step 5: reCAPTCHA Configuration -->
-            <template if:true={isStep5}>
+            <!-- Step 5: reCAPTCHA Configuration (v1 MVP: hidden via isStep6 which is always false) -->
+            <template if:true={isStep6}>
                 <div class="slds-p-around_medium">
                     <div class="slds-text-heading_medium slds-m-bottom_medium">Configure reCAPTCHA (Optional)</div>
                     <p class="slds-m-bottom_medium">
@@ -512,8 +512,8 @@
                 </div>
             </template>
 
-            <!-- Step 6: Complete -->
-            <template if:true={isStep6}>
+            <!-- Step 5 (was 6): Complete -->
+            <template if:true={isStep5}>
                 <div class="slds-p-around_medium">
                     <div class="slds-text-align_center slds-m-bottom_large">
                         <lightning-icon icon-name="utility:success" size="large" variant="success"></lightning-icon>
@@ -618,7 +618,8 @@
                         </lightning-button>
                     </div>
 
-                    <!-- reCAPTCHA Status -->
+                    <!-- reCAPTCHA Status (v1 MVP: hidden via isStep6 which is always false — restore for v2) -->
+                    <template if:true={isStep6}>
                     <template if:true={recaptchaConfigured}>
                         <div class="slds-box slds-box_x-small slds-theme_success slds-m-bottom_medium">
                             <lightning-icon icon-name="utility:success" size="x-small" variant="inverse" class="slds-m-right_x-small"></lightning-icon>
@@ -637,6 +638,7 @@
                                 size="small">
                             </lightning-button>
                         </div>
+                    </template>
                     </template>
                 </div>
             </template>

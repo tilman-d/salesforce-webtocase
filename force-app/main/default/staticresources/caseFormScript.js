@@ -1,3 +1,5 @@
+/* global formConfig, grecaptcha, imageCompression, Visualforce */
+/* eslint @lwc/lwc/no-inner-html: "off" */
 /**
  * Web-to-Case Form Script
  * Handles form validation, file upload (including chunked uploads for large files),
@@ -105,7 +107,7 @@
      * @returns {Promise<File|Blob>} - The original or compressed file
      */
     function compressImageIfNeeded(file) {
-        return new Promise(function(resolve, reject) {
+        return new Promise(function(resolve) {
             // Not an image? Return as-is
             if (!isSupportedImage(file)) {
                 resolve(file);

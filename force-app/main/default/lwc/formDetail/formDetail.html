@@ -119,6 +119,7 @@
                                 </p>
                             </template>
                         </div>
+                        <template if:true={showCaptchaToggle}>
                         <div class="slds-col slds-size_1-of-1 slds-p-bottom_small slds-p-top_small">
                             <lightning-input
                                 type="checkbox"
@@ -128,6 +129,7 @@
                                 field-level-help="Enable Google reCAPTCHA v2 to protect this form from spam and bot submissions. Requires reCAPTCHA keys to be configured in Custom Settings.">
                             </lightning-input>
                         </div>
+                        </template>
 
                         <!-- Site Selection -->
                         <div class="slds-col slds-size_1-of-1 slds-p-bottom_small slds-p-top_medium">

@@ -17,6 +17,9 @@ global without sharing class WebToCaseRestAPI {
     // Chunk size for file uploads (matches CaseFormController)
     private static final Integer CHUNK_SIZE = 750000;
 
+    // Test-visible flag to simulate CRUD denial in tests
+    @TestVisible private static Boolean testDenyCrud = false;
+
     /**
      * Handle GET requests - Form configuration
      */
@@ -48,6 +51,17 @@ global without sharing class WebToCaseRestAPI {
                 return;
             }
 
+            // CRUD checks for form configuration queries
+            Boolean crudDenied = Test.isRunningTest() && testDenyCrud;
+            if (crudDenied || !Schema.sObjectType.Form__c.isAccessible()) {
+                sendErrorResponse(res, 403, 'Insufficient permissions to read form configuration');
+                return;
+            }
+            if (crudDenied || !Schema.sObjectType.Form_Field__c.isAccessible()) {
+                sendErrorResponse(res, 403, 'Insufficient permissions to read form fields');
+                return;
+            }
+
             // Get form configuration
             List<Form__c> forms = [
                 SELECT Id, Form_Name__c, Title__c, Description__c, Success_Message__c,
@@ -64,6 +78,10 @@ global without sharing class WebToCaseRestAPI {
 
             Form__c form = forms[0];
 
+            // FLS enforcement: strip inaccessible fields from Form__c
+            SObjectAccessDecision formDecision = Security.stripInaccessible(AccessType.READABLE, new List<Form__c>{ form });
+            form = (Form__c) formDecision.getRecords()[0];
+
             // Get form fields
             List<Form_Field__c> fields = [
                 SELECT Id, Field_Label__c, Field_Type__c, Case_Field__c, Required__c, Sort_Order__c
@@ -71,6 +89,9 @@ global without sharing class WebToCaseRestAPI {
                 WHERE Form__c = :form.Id
                 ORDER BY Sort_Order__c ASC
             ];
+
+            // FLS enforcement: strip inaccessible fields from Form_Field__c
+            fields = (List<Form_Field__c>) Security.stripInaccessible(AccessType.READABLE, fields).getRecords();
 
             // Build allowed fields list
             List<String> allowedFields = new List<String>();
@@ -384,7 +405,14 @@ global without sharing class WebToCaseRestAPI {
             return new OriginValidationResult(false, 'Invalid origin format', null);
         }
 
-        // Get form's allowed domains
+        // CRUD check for Form__c query (security-critical origin validation)
+        Boolean crudDenied = Test.isRunningTest() && testDenyCrud;
+        if (crudDenied || !Schema.sObjectType.Form__c.isAccessible()) {
+            return new OriginValidationResult(false, 'Insufficient permissions to read form configuration', null);
+        }
+
+        // Security-critical query: Allowed_Domains__c is used for origin allowlisting.
+        // No stripInaccessible — stripping this field would bypass CORS security.
         List<Form__c> forms = [
             SELECT Id, Allowed_Domains__c
             FROM Form__c
@@ -426,7 +454,14 @@ global without sharing class WebToCaseRestAPI {
             return new OriginValidationResult(false, 'Invalid origin format', null);
         }
 
-        // Get form's allowed domains
+        // CRUD check for Form__c query (security-critical origin validation)
+        Boolean crudDenied = Test.isRunningTest() && testDenyCrud;
+        if (crudDenied || !Schema.sObjectType.Form__c.isAccessible()) {
+            return new OriginValidationResult(false, 'Insufficient permissions to read form configuration', null);
+        }
+
+        // Security-critical query: Allowed_Domains__c is used for origin allowlisting.
+        // No stripInaccessible — stripping this field would bypass CORS security.
         List<Form__c> forms = [
             SELECT Id, Allowed_Domains__c
             FROM Form__c

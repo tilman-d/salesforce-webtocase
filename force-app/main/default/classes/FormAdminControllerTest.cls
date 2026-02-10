@@ -871,6 +871,63 @@ private class FormAdminControllerTest {
         System.assertEquals(1, info.picklistValues.size(), 'Should have 1 picklist value');
     }
 
+    // ==================== CRUD Denial Tests ====================
+
+    @isTest
+    static void testSaveFormNoCrudAccess() {
+        FormAdminController.testDenyCrud = true;
+
+        Map<String, Object> formData = createFormData(
+            null, 'crud-test', 'CRUD Test', null,
+            false, false, 10, null
+        );
+
+        Test.startTest();
+        try {
+            FormAdminController.saveForm(formData);
+            System.assert(false, 'Should have thrown exception');
+        } catch (AuraHandledException e) {
+            System.assert(e.getMessage().contains('permission'),
+                'Error should mention permission: ' + e.getMessage());
+        }
+        Test.stopTest();
+    }
+
+    @isTest
+    static void testDeleteFormNoCrudAccess() {
+        Form__c form = [SELECT Id FROM Form__c WHERE Form_Name__c = 'test-form-two' LIMIT 1];
+        FormAdminController.testDenyCrud = true;
+
+        Test.startTest();
+        try {
+            FormAdminController.deleteForm(form.Id);
+            System.assert(false, 'Should have thrown exception');
+        } catch (AuraHandledException e) {
+            System.assert(e.getMessage().contains('permission'),
+                'Error should mention permission: ' + e.getMessage());
+        }
+        Test.stopTest();
+
+        // Verify form was NOT deleted
+        List<Form__c> remaining = [SELECT Id FROM Form__c WHERE Id = :form.Id];
+        System.assertEquals(1, remaining.size(), 'Form should NOT be deleted when CRUD denied');
+    }
+
+    @isTest
+    static void testGetFormsNoCrudAccess() {
+        FormAdminController.testDenyCrud = true;
+
+        Test.startTest();
+        try {
+            FormAdminController.getForms();
+            System.assert(false, 'Should have thrown exception');
+        } catch (AuraHandledException e) {
+            System.assert(e.getMessage().contains('permission'),
+                'Error should mention permission: ' + e.getMessage());
+        }
+        Test.stopTest();
+    }
+
     @isTest
     static void testGetFormsWithPublicUrl() {
         // Insert default site settings

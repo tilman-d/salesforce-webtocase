@@ -13,8 +13,21 @@ public class ErrorLogger {
     private static final Integer MAX_MESSAGE_LENGTH = 32768;
     private static final Integer MAX_STACK_TRACE_LENGTH = 32768;
 
+    // Test-visible flag to simulate CRUD denial in tests
+    @TestVisible private static Boolean testDenyCrud = false;
+
     public static void log(String message, String stackTrace, String formId) {
         try {
+            // CRUD check: fail silently to avoid masking original errors
+            if (Test.isRunningTest() && testDenyCrud) {
+                System.debug(LoggingLevel.ERROR, 'ErrorLogger: CRUD denied (test override)');
+                return;
+            }
+            if (!Schema.sObjectType.Error_Log__c.isCreateable()) {
+                System.debug(LoggingLevel.ERROR, 'ErrorLogger: No create access to Error_Log__c');
+                return;
+            }
+
             // Truncate to field limits
             String truncatedMessage = message != null && message.length() > MAX_MESSAGE_LENGTH
                 ? message.substring(0, MAX_MESSAGE_LENGTH)

@@ -143,6 +143,9 @@ export default class SetupStatus extends LightningElement {
         return this.showPermissionDetails ? 'Hide Details' : 'Show Details';
     }
 
+    // v1 MVP: set to true for v2
+    get showRecaptchaPanel() { return false; }
+
     get recaptchaStatusLabel() {
         return this.status?.recaptchaConfigured ? 'Configured' : 'Not Configured';
     }
