@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CspTrustedSite xmlns="http://soap.sforce.com/2006/04/metadata">
+    <context>All</context>
+    <description>Allow dietrich.ai to embed Salesforce pages in iframes</description>
+    <endpointUrl>https://dietrich.ai</endpointUrl>
+    <isActive>true</isActive>
+    <isApplicableToConnectSrc>false</isApplicableToConnectSrc>
+</CspTrustedSite>

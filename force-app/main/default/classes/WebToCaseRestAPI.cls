@@ -34,17 +34,19 @@ global without sharing class WebToCaseRestAPI {
                 return;
             }
 
-            // Validate origin
+            // Validate origin and set CORS headers
             String origin = req.headers.get('Origin');
             OriginValidationResult originResult = validateOrigin(origin, formName);
+
+            // Always set CORS headers when origin is present so error messages are readable
+            if (String.isNotBlank(origin)) {
+                setCorsHeaders(res, origin);
+            }
 
             if (!originResult.valid) {
                 sendErrorResponse(res, 403, originResult.error);
                 return;
             }
-
-            // Set CORS headers
-            setCorsHeaders(res, origin);
 
             // Get form configuration
             List<Form__c> forms = [
@@ -179,17 +181,19 @@ global without sharing class WebToCaseRestAPI {
             return;
         }
 
-        // Validate origin
+        // Validate origin and set CORS headers
         String origin = req.headers.get('Origin');
         OriginValidationResult originResult = validateOriginForFormId(origin, formId);
+
+        // Always set CORS headers when origin is present so error messages are readable
+        if (String.isNotBlank(origin)) {
+            setCorsHeaders(res, origin);
+        }
 
         if (!originResult.valid) {
             sendErrorResponse(res, 403, originResult.error);
             return;
         }
-
-        // Set CORS headers
-        setCorsHeaders(res, origin);
 
         // Check rate limit
         WebToCaseRateLimiter.RateLimitResult rateLimitResult =
@@ -263,17 +267,19 @@ global without sharing class WebToCaseRestAPI {
             return;
         }
 
-        // Validate origin against the form's allowed domains (not just presence check)
+        // Validate origin against the form's allowed domains
         String origin = req.headers.get('Origin');
         OriginValidationResult originResult = validateOriginForFormId(origin, formId);
+
+        // Always set CORS headers when origin is present so error messages are readable
+        if (String.isNotBlank(origin)) {
+            setCorsHeaders(res, origin);
+        }
 
         if (!originResult.valid) {
             sendErrorResponse(res, 403, originResult.error);
             return;
         }
-
-        // Set CORS headers only after successful validation
-        setCorsHeaders(res, origin);
 
         // Call existing chunk upload logic
         Map<String, Object> result = CaseFormController.uploadFileChunk(
@@ -312,13 +318,15 @@ global without sharing class WebToCaseRestAPI {
         String origin = req.headers.get('Origin');
         OriginValidationResult originResult = validateOriginForFormId(origin, formId);
 
+        // Always set CORS headers when origin is present so error messages are readable
+        if (String.isNotBlank(origin)) {
+            setCorsHeaders(res, origin);
+        }
+
         if (!originResult.valid) {
             sendErrorResponse(res, 403, originResult.error);
             return;
         }
-
-        // Set CORS headers
-        setCorsHeaders(res, origin);
 
         // Call existing status check logic
         Map<String, Object> result = CaseFormController.checkUploadStatus(caseId, uploadKey, fileName);
@@ -538,11 +546,14 @@ global without sharing class WebToCaseRestAPI {
 
     /**
      * Check if a domain is in the allowed list
-     * Performs exact match only (no wildcards)
+     * Supports exact match, www-prefix matching, and port stripping
      */
     private static Boolean isDomainAllowed(String canonicalOrigin, String allowedDomains) {
         // Parse allowed domains (newline-separated)
         List<String> domains = allowedDomains.split('\n');
+
+        // Strip www. from origin for comparison
+        String originBare = canonicalOrigin.startsWith('www.') ? canonicalOrigin.substringAfter('www.') : canonicalOrigin;
 
         for (String allowedDomain : domains) {
             allowedDomain = allowedDomain.trim().toLowerCase();
@@ -552,15 +563,18 @@ global without sharing class WebToCaseRestAPI {
                 continue;
             }
 
-            // Exact match required
-            if (canonicalOrigin == allowedDomain) {
+            // Strip www. from allowed domain for comparison
+            String allowedBare = allowedDomain.startsWith('www.') ? allowedDomain.substringAfter('www.') : allowedDomain;
+
+            // Match: bare domains (ignoring www on both sides)
+            if (originBare == allowedBare) {
                 return true;
             }
 
             // Also check without port if origin has port
-            if (canonicalOrigin.contains(':')) {
-                String domainOnly = canonicalOrigin.substringBefore(':');
-                if (domainOnly == allowedDomain) {
+            if (originBare.contains(':')) {
+                String domainOnly = originBare.substringBefore(':');
+                if (domainOnly == allowedBare) {
                     return true;
                 }
             }

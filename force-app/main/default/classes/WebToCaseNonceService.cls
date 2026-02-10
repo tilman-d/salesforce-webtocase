@@ -11,7 +11,7 @@ public class WebToCaseNonceService {
     private static final Integer NONCE_TTL_SECONDS = 900;
 
     // Nonce prefix for cache keys
-    private static final String NONCE_PREFIX = 'nonce_';
+    private static final String NONCE_PREFIX = 'nonce';
 
     // In-memory fallback for test context (Platform Cache unavailable)
     @TestVisible
@@ -62,8 +62,9 @@ public class WebToCaseNonceService {
         // Try Platform Cache first, fall back to in-memory for test context
         if (isCacheAvailable()) {
             try {
-                Cache.Org.put(cacheKey, serializedData, NONCE_TTL_SECONDS);
-            } catch (Cache.CacheException e) {
+                Cache.OrgPartition partition = Cache.Org.getPartition(CACHE_PARTITION);
+                partition.put(cacheKey, serializedData, NONCE_TTL_SECONDS);
+            } catch (Exception e) {
                 // Fallback to in-memory cache
                 testModeCache.put(cacheKey, serializedData);
             }
@@ -92,23 +93,33 @@ public class WebToCaseNonceService {
 
         try {
             Object cached = null;
+            Boolean usedPlatformCache = false;
 
             // Try Platform Cache first, then in-memory fallback
             if (isCacheAvailable()) {
                 try {
-                    // Atomically get and remove the nonce
-                    cached = Cache.Org.remove(cacheKey);
-                } catch (Cache.CacheException e) {
+                    // Get then remove the nonce using partition-qualified API
+                    // Note: OrgPartition.remove() returns Boolean, not the value,
+                    // so we must get() first then remove()
+                    Cache.OrgPartition partition = Cache.Org.getPartition(CACHE_PARTITION);
+                    cached = partition.get(cacheKey);
+                    partition.remove(cacheKey);
+                    usedPlatformCache = true;
+                } catch (Exception e) {
                     // Try in-memory fallback
+                    ErrorLogger.log('Nonce validate: partition.remove() threw', e.getMessage(), formId);
                     cached = testModeCache.remove(cacheKey);
                 }
             } else {
                 // Use in-memory cache (test context or cache not configured)
+                ErrorLogger.log('Nonce validate: cache not available, using testModeCache', 'cacheKey=' + cacheKey, formId);
                 cached = testModeCache.remove(cacheKey);
             }
 
             if (cached == null) {
                 // Nonce not found (expired, already used, or never existed)
+                ErrorLogger.log('Nonce validate: cached value is null',
+                    'usedPlatformCache=' + usedPlatformCache + ', cacheKey=' + cacheKey, formId);
                 return null;
             }
 
@@ -165,8 +176,9 @@ public class WebToCaseNonceService {
      * Uses Crypto.generateAesKey for randomness
      */
     private static String generateSecureRandomId() {
-        // Generate 256-bit random key and encode as hex
-        Blob randomBytes = Crypto.generateAesKey(256);
+        // Generate 128-bit random key and encode as hex (32 chars)
+        // Must stay <= 45 chars so prefix + nonce fits Platform Cache 50-char key limit
+        Blob randomBytes = Crypto.generateAesKey(128);
         return EncodingUtil.convertToHex(randomBytes);
     }
 
@@ -185,13 +197,11 @@ public class WebToCaseNonceService {
             return false;
         }
 
-        // Check if Platform Cache partition exists
+        // Check if Platform Cache partition exists using partition-qualified API
         try {
-            // Try to get a non-existent key - this will throw if partition doesn't exist
-            Cache.Org.get('__test_key__');
+            Cache.OrgPartition partition = Cache.Org.getPartition(CACHE_PARTITION);
+            partition.get('cacheAvailTest');
             cacheAvailable = true;
-        } catch (Cache.Org.OrgCacheException e) {
-            cacheAvailable = false;
         } catch (Exception e) {
             cacheAvailable = false;
         }

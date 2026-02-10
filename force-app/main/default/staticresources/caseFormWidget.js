@@ -327,20 +327,36 @@
             var self = this;
             var config = this.formConfig;
             var captchaType = config.captchaType || 'V2_Checkbox';
+            var lightContainer = this.captchaLightContainer;
 
-            // Create container in light DOM (outside Shadow DOM)
-            var lightContainer = document.createElement('div');
-            lightContainer.id = 'wtc_captcha_' + Date.now();
-            lightContainer.style.marginBottom = '16px';
+            // Connected mode: use user-provided container by ID
+            if (!lightContainer && this.options && this.options.captchaContainerId) {
+                lightContainer = document.getElementById(this.options.captchaContainerId);
+            }
 
-            // Find placeholder in shadow DOM and insert light DOM element after container
-            var placeholder = this.shadowRoot.getElementById('wtcCaptchaContainer');
-            if (placeholder) {
-                // Insert after the widget container in light DOM
+            // Widget mode: create and inject a light DOM container (outside Shadow DOM)
+            if (!lightContainer && this.shadowRoot && this.container) {
+                lightContainer = document.createElement('div');
+                lightContainer.style.marginBottom = '16px';
                 this.container.appendChild(lightContainer);
             }
 
-            // Store reference
+            // v2 modes require a visible container
+            if (captchaType !== 'V3_Score' && !lightContainer) {
+                console.warn(
+                    'WebToCaseForm: CAPTCHA container not found. ' +
+                    'Provide captchaContainerId when using connect().'
+                );
+                return;
+            }
+
+            if (lightContainer) {
+                if (!lightContainer.id) {
+                    lightContainer.id = 'wtc_captcha_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
+                }
+                lightContainer.style.display = '';
+            }
+
             this.captchaLightContainer = lightContainer;
 
             // Load reCAPTCHA script
@@ -363,10 +379,24 @@
                 };
             }
 
+            // If already loaded, render immediately for v2.
+            if (typeof grecaptcha !== 'undefined') {
+                if (captchaType !== 'V3_Score') {
+                    this.renderCaptchaWidget();
+                }
+                return;
+            }
+
+            // Prevent duplicate script tags across multiple form instances.
+            if (document.querySelector('script[data-wtc-recaptcha="true"]')) {
+                return;
+            }
+
             var script = document.createElement('script');
             script.src = scriptUrl;
             script.async = true;
             script.defer = true;
+            script.setAttribute('data-wtc-recaptcha', 'true');
             document.head.appendChild(script);
         },
 
@@ -377,7 +407,7 @@
             var config = this.formConfig;
             var captchaType = config.captchaType || 'V2_Checkbox';
 
-            if (!this.captchaLightContainer || typeof grecaptcha === 'undefined') {
+            if (!this.captchaLightContainer || typeof grecaptcha === 'undefined' || this.captchaWidgetId !== null) {
                 return;
             }
 
@@ -573,7 +603,7 @@
         /**
          * Submit form to REST API
          */
-        submitForm: function(fieldValues, fileName, fileContent, captchaToken) {
+        submitForm: function(fieldValues, fileName, fileContent, captchaToken, _isRetry) {
             var self = this;
             var config = this.formConfig;
             var url = this.options.apiBase + '/webtocase/v1/submit';
@@ -600,18 +630,34 @@
                 });
             })
             .then(function(result) {
-                self.setLoading(false);
-
                 if (result.data.success) {
+                    self.setLoading(false);
                     self.showSuccess(result.data.caseNumber);
                     if (self.options.onSuccess) {
                         self.options.onSuccess(result.data.caseNumber);
                     }
                 } else {
                     var errorMsg = result.data.error || 'Submission failed.';
+
+                    // Transparent nonce retry: fetch fresh config and resubmit once
+                    if (!_isRetry && errorMsg.toLowerCase().indexOf('nonce') !== -1) {
+                        self.fetchFormConfig()
+                            .then(function(freshConfig) {
+                                self.formConfig = freshConfig;
+                                self.submitForm(fieldValues, fileName, fileContent, captchaToken, true);
+                            })
+                            .catch(function() {
+                                self.setLoading(false);
+                                self.showFormError(errorMsg);
+                                self.resetCaptcha();
+                            });
+                        return;
+                    }
+
+                    self.setLoading(false);
                     self.showFormError(errorMsg);
                     self.resetCaptcha();
-                    self.refreshNonce(); // Get new nonce for retry
+                    self.refreshNonce(); // Get new nonce for manual retry
                     if (self.options.onError) {
                         self.options.onError(errorMsg);
                     }
@@ -1113,17 +1159,9 @@
         getStyles: function() {
             return '<style>' +
                 ':host {' +
-                '  --wtc-primary-color: var(--wtc-primary-color, #0176d3);' +
-                '  --wtc-font-family: var(--wtc-font-family, system-ui, -apple-system, sans-serif);' +
-                '  --wtc-border-radius: var(--wtc-border-radius, 4px);' +
-                '  --wtc-input-border: var(--wtc-input-border, 1px solid #c9c9c9);' +
-                '  --wtc-input-background: var(--wtc-input-background, #ffffff);' +
-                '  --wtc-text-color: var(--wtc-text-color, #181818);' +
-                '  --wtc-error-color: var(--wtc-error-color, #c23934);' +
-                '  --wtc-success-color: var(--wtc-success-color, #2e844a);' +
                 '  display: block;' +
-                '  font-family: var(--wtc-font-family);' +
-                '  color: var(--wtc-text-color);' +
+                '  font-family: var(--wtc-font-family, system-ui, -apple-system, sans-serif);' +
+                '  color: var(--wtc-text-color, #181818);' +
                 '  line-height: 1.5;' +
                 '}' +
 
@@ -1136,7 +1174,7 @@
                 '  font-size: var(--wtc-title-font-size, 1.5rem);' +
                 '  font-weight: var(--wtc-title-font-weight, 600);' +
                 '  margin: var(--wtc-title-margin, 0 0 8px 0);' +
-                '  color: var(--wtc-text-color);' +
+                '  color: var(--wtc-text-color, #181818);' +
                 '}' +
 
                 '.wtc-description {' +
@@ -1160,35 +1198,37 @@
                 '  font-size: var(--wtc-label-font-size, 0.875rem);' +
                 '  font-weight: var(--wtc-label-font-weight, 500);' +
                 '  margin-bottom: 6px;' +
-                '  color: var(--wtc-label-color, var(--wtc-text-color));' +
+                '  color: var(--wtc-label-color, var(--wtc-text-color, #181818));' +
                 '}' +
 
                 '.wtc-required {' +
-                '  color: var(--wtc-error-color);' +
+                '  color: var(--wtc-error-color, #c23934);' +
                 '  margin-left: 2px;' +
                 '}' +
 
                 '.wtc-input {' +
+                '  box-sizing: border-box;' +
                 '  width: 100%;' +
                 '  padding: var(--wtc-input-padding, 10px 12px);' +
                 '  font-size: var(--wtc-input-font-size, 1rem);' +
                 '  font-family: inherit;' +
-                '  color: var(--wtc-text-color);' +
-                '  background: var(--wtc-input-background);' +
-                '  border: var(--wtc-input-border);' +
-                '  border-radius: var(--wtc-border-radius);' +
+                '  color: var(--wtc-text-color, #181818);' +
+                '  background: var(--wtc-input-background, #ffffff);' +
+                '  border: var(--wtc-input-border, 1px solid #c9c9c9);' +
+                '  border-radius: var(--wtc-border-radius, 4px);' +
                 '  transition: border-color 0.2s, box-shadow 0.2s;' +
                 '}' +
 
                 '.wtc-input:focus {' +
-                '  outline: none;' +
-                '  border-color: var(--wtc-primary-color);' +
-                '  box-shadow: 0 0 0 3px rgba(1, 118, 211, 0.15);' +
+                '  outline: 2px solid var(--wtc-primary-color, #0176d3);' +
+                '  outline-offset: -1px;' +
+                '  border-color: var(--wtc-primary-color, #0176d3);' +
                 '}' +
 
                 '.wtc-input-error {' +
-                '  border-color: var(--wtc-error-color) !important;' +
-                '  box-shadow: 0 0 0 3px rgba(194, 57, 52, 0.15) !important;' +
+                '  border-color: var(--wtc-error-color, #c23934) !important;' +
+                '  outline: 2px solid var(--wtc-error-color, #c23934) !important;' +
+                '  outline-offset: -1px;' +
                 '}' +
 
                 '.wtc-textarea {' +
@@ -1199,8 +1239,8 @@
                 '.wtc-file-input {' +
                 '  padding: 8px;' +
                 '  background: #f9f9f9;' +
-                '  border: var(--wtc-input-border);' +
-                '  border-radius: var(--wtc-border-radius);' +
+                '  border: var(--wtc-input-border, 1px solid #c9c9c9);' +
+                '  border-radius: var(--wtc-border-radius, 4px);' +
                 '  cursor: pointer;' +
                 '}' +
 
@@ -1211,15 +1251,16 @@
                 '}' +
 
                 '.wtc-submit {' +
+                '  box-sizing: border-box;' +
                 '  width: 100%;' +
                 '  padding: var(--wtc-submit-padding, 12px 24px);' +
                 '  font-size: var(--wtc-submit-font-size, 1rem);' +
                 '  font-weight: 600;' +
                 '  font-family: inherit;' +
                 '  color: var(--wtc-submit-color, #fff);' +
-                '  background: var(--wtc-submit-background, var(--wtc-primary-color));' +
+                '  background: var(--wtc-submit-background, var(--wtc-primary-color, #0176d3));' +
                 '  border: none;' +
-                '  border-radius: var(--wtc-submit-border-radius, var(--wtc-border-radius));' +
+                '  border-radius: var(--wtc-submit-border-radius, var(--wtc-border-radius, 4px));' +
                 '  cursor: pointer;' +
                 '  transition: background-color 0.2s, opacity 0.2s;' +
                 '}' +
@@ -1229,7 +1270,7 @@
                 '}' +
 
                 '.wtc-submit:disabled {' +
-                '  background: #9ca3af;' +
+                '  opacity: 0.6;' +
                 '  cursor: not-allowed;' +
                 '}' +
 
@@ -1243,22 +1284,22 @@
                 '  color: #721c24;' +
                 '  background: var(--wtc-error-background, #f8d7da);' +
                 '  border: var(--wtc-error-border, 1px solid #f5c6cb);' +
-                '  border-radius: var(--wtc-border-radius);' +
+                '  border-radius: var(--wtc-border-radius, 4px);' +
                 '}' +
 
                 '.wtc-captcha-error {' +
                 '  font-size: 0.75rem;' +
-                '  color: var(--wtc-error-color);' +
+                '  color: var(--wtc-error-color, #c23934);' +
                 '  margin-top: 8px;' +
                 '}' +
 
                 '.wtc-success {' +
                 '  padding: 24px;' +
                 '  text-align: center;' +
-                '  color: var(--wtc-success-color);' +
+                '  color: var(--wtc-success-color, #2e844a);' +
                 '  background: var(--wtc-success-background, #d4edda);' +
                 '  border: var(--wtc-success-border, 1px solid #c3e6cb);' +
-                '  border-radius: var(--wtc-border-radius);' +
+                '  border-radius: var(--wtc-border-radius, 4px);' +
                 '}' +
 
                 '.wtc-success-icon {' +
@@ -1272,7 +1313,7 @@
 
                 '.wtc-case-number {' +
                 '  font-size: 0.875rem;' +
-                '  color: #0d5c3d;' +
+                '  color: var(--wtc-success-color, #2e844a);' +
                 '}' +
 
                 '.wtc-case-number span {' +
@@ -1292,7 +1333,7 @@
                 '  width: 32px;' +
                 '  height: 32px;' +
                 '  border: 3px solid #e5e5e5;' +
-                '  border-top-color: var(--wtc-primary-color);' +
+                '  border-top-color: var(--wtc-primary-color, #0176d3);' +
                 '  border-radius: 50%;' +
                 '  animation: wtc-spin 0.8s linear infinite;' +
                 '  margin-bottom: 12px;' +
@@ -1305,10 +1346,10 @@
                 '.wtc-error {' +
                 '  padding: 24px;' +
                 '  text-align: center;' +
-                '  color: var(--wtc-error-color);' +
+                '  color: var(--wtc-error-color, #c23934);' +
                 '  background: #fef2f2;' +
                 '  border: 1px solid #fecaca;' +
-                '  border-radius: var(--wtc-border-radius);' +
+                '  border-radius: var(--wtc-border-radius, 4px);' +
                 '}' +
             '</style>';
         }
@@ -1370,6 +1411,7 @@
         this.captchaLightContainer = null;
         this.imageCompression = null;
         this._submitHandler = null;
+        this._fieldListeners = [];
     }
 
     ConnectedForm.prototype = {
@@ -1405,6 +1447,7 @@
                     self.formConfig = config;
                     self._warnMissingFields(config);
                     self._attachSubmitHandler();
+                    self._attachFieldListeners();
                     self._loadDependencies();
                     if (self.options.onLoad) {
                         self.options.onLoad();
@@ -1430,7 +1473,9 @@
                 var input = this.formEl.querySelector('[name="' + field.caseField + '"]');
                 if (!input) {
                     console.warn(
-                        'WebToCaseForm.connect: No input found for required field "' +
+                        'WebToCaseForm.connect: No input found for ' +
+                        (field.required ? 'required ' : '') +
+                        'field "' +
                         field.caseField + '" (label: "' + field.label + '"). ' +
                         'Add an input with name="' + field.caseField + '" to your form.'
                     );
@@ -1451,6 +1496,42 @@
         },
 
         /**
+         * Clear connect-mode errors/aria state while user edits fields
+         */
+        _attachFieldListeners: function() {
+            var self = this;
+            this._removeFieldListeners();
+
+            var fields = this.formEl.querySelectorAll('input[name], textarea[name], select[name]');
+            for (var i = 0; i < fields.length; i++) {
+                var field = fields[i];
+                var clearHandler = function() {
+                    this.removeAttribute('aria-invalid');
+                    self.hideError();
+                };
+
+                field.addEventListener('input', clearHandler);
+                field.addEventListener('change', clearHandler);
+                this._fieldListeners.push({
+                    element: field,
+                    handler: clearHandler
+                });
+            }
+        },
+
+        /**
+         * Remove field listeners (used on destroy/re-init)
+         */
+        _removeFieldListeners: function() {
+            for (var i = 0; i < this._fieldListeners.length; i++) {
+                var listener = this._fieldListeners[i];
+                listener.element.removeEventListener('input', listener.handler);
+                listener.element.removeEventListener('change', listener.handler);
+            }
+            this._fieldListeners = [];
+        },
+
+        /**
          * Load dependencies (image compression, CAPTCHA)
          */
         _loadDependencies: function() {
@@ -1468,6 +1549,7 @@
         handleSubmit: function() {
             var self = this;
             var config = this.formConfig;
+            this.hideError();
 
             // Validate form
             var errors = this.validateForm();
@@ -1479,12 +1561,15 @@
             // Validate CAPTCHA (v2 checkbox)
             var captchaType = config.captchaType || 'V2_Checkbox';
             if (config.enableCaptcha && captchaType === 'V2_Checkbox') {
-                if (typeof grecaptcha !== 'undefined' && this.captchaWidgetId !== null) {
-                    var token = grecaptcha.getResponse(this.captchaWidgetId);
-                    if (!token) {
-                        this.showFormError('Please complete the verification.');
-                        return;
-                    }
+                if (typeof grecaptcha === 'undefined' || this.captchaWidgetId === null) {
+                    this.showFormError('Verification is still loading. Please try again.');
+                    return;
+                }
+
+                var token = grecaptcha.getResponse(this.captchaWidgetId);
+                if (!token) {
+                    this.showFormError('Please complete the verification.');
+                    return;
                 }
             }
 
@@ -1620,6 +1705,7 @@
         hideError: function() {
             if (this.errorEl) {
                 this.errorEl.hidden = true;
+                this.errorEl.innerHTML = '';
             }
         },
 
@@ -1657,6 +1743,7 @@
                 this.formEl.removeEventListener('submit', this._submitHandler);
                 this._submitHandler = null;
             }
+            this._removeFieldListeners();
             // Clean up CAPTCHA globals
             if (window.wtcCaptchaOnload) {
                 delete window.wtcCaptchaOnload;

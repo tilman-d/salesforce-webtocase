@@ -582,23 +582,28 @@ export default class FormDetail extends LightningElement {
     get customHtmlSnippet() {
         const formName = this.form.formName || 'your-form-name';
         const formId = 'wtc-' + formName;
+        const fileInputId = `${formId}-file`;
+        const captchaId = `${formId}-captcha`;
+        const errorId = `${formId}-error`;
+        const successId = `${formId}-success`;
         let html = `<form id="${formId}">\n`;
 
         if (this.fields && this.fields.length > 0) {
             for (const field of this.fields) {
                 const label = field.fieldLabel || 'Field';
                 const name = field.caseField || 'Subject';
+                const inputId = `${formId}-${name}`;
                 const req = field.required ? ' required' : '';
                 html += `  <div>\n`;
-                html += `    <label for="${name}">${label}${field.required ? ' *' : ''}</label>\n`;
+                html += `    <label for="${inputId}">${label}${field.required ? ' *' : ''}</label>\n`;
                 if (field.fieldType === 'Textarea') {
-                    html += `    <textarea id="${name}" name="${name}"${req}></textarea>\n`;
+                    html += `    <textarea id="${inputId}" name="${name}"${req}></textarea>\n`;
                 } else if (field.fieldType === 'Email') {
-                    html += `    <input type="email" id="${name}" name="${name}"${req} />\n`;
+                    html += `    <input type="email" id="${inputId}" name="${name}"${req} />\n`;
                 } else if (field.fieldType === 'Phone') {
-                    html += `    <input type="tel" id="${name}" name="${name}"${req} />\n`;
+                    html += `    <input type="tel" id="${inputId}" name="${name}"${req} />\n`;
                 } else {
-                    html += `    <input type="text" id="${name}" name="${name}"${req} />\n`;
+                    html += `    <input type="text" id="${inputId}" name="${name}"${req} />\n`;
                 }
                 html += `  </div>\n`;
             }
@@ -606,19 +611,19 @@ export default class FormDetail extends LightningElement {
 
         if (this.form.enableFileUpload) {
             html += `  <div>\n`;
-            html += `    <label for="wtc-file">Attachment</label>\n`;
-            html += `    <input type="file" id="wtc-file" />\n`;
+            html += `    <label for="${fileInputId}">Attachment</label>\n`;
+            html += `    <input type="file" id="${fileInputId}" />\n`;
             html += `  </div>\n`;
         }
 
         if (this.form.enableCaptcha) {
-            html += `  <div id="wtc-captcha"></div>\n`;
+            html += `  <div id="${captchaId}"></div>\n`;
         }
 
-        html += `  <div id="wtc-error" hidden></div>\n`;
+        html += `  <div id="${errorId}" hidden></div>\n`;
         html += `  <button type="submit">Submit</button>\n`;
         html += `</form>\n\n`;
-        html += `<div id="wtc-success" hidden>\n`;
+        html += `<div id="${successId}" hidden>\n`;
         html += `  <p>Your request has been submitted successfully.</p>\n`;
         html += `  <p>Reference: <span data-wtc-case-number></span></p>\n`;
         html += `</div>`;
@@ -629,6 +634,8 @@ export default class FormDetail extends LightningElement {
     get customCssSnippet() {
         const formName = this.form.formName || 'your-form-name';
         const formId = 'wtc-' + formName;
+        const errorId = `${formId}-error`;
+        const successId = `${formId}-success`;
         return `<style>
   #${formId} {
     max-width: 600px;
@@ -668,7 +675,7 @@ export default class FormDetail extends LightningElement {
     font-size: 1rem;
     cursor: pointer;
   }
-  #wtc-error {
+  #${errorId} {
     padding: 12px;
     background: #f8d7da;
     border: 1px solid #f5c6cb;
@@ -676,7 +683,7 @@ export default class FormDetail extends LightningElement {
     color: #721c24;
     font-size: 0.875rem;
   }
-  #wtc-success {
+  #${successId} {
     padding: 24px;
     background: #d4edda;
     border: 1px solid #c3e6cb;
@@ -695,6 +702,10 @@ export default class FormDetail extends LightningElement {
         }
         const formName = this.form.formName || 'your-form-name';
         const formId = 'wtc-' + formName;
+        const fileInputId = `${formId}-file`;
+        const captchaId = `${formId}-captcha`;
+        const errorId = `${formId}-error`;
+        const successId = `${formId}-success`;
 
         let opts = '';
         opts += `    formName: '${formName}',\n`;
@@ -702,14 +713,14 @@ export default class FormDetail extends LightningElement {
         opts += `    apiBase: '${apiBase}',\n`;
 
         if (this.form.enableFileUpload) {
-            opts += `    fileInputSelector: '#wtc-file',\n`;
+            opts += `    fileInputSelector: '#${fileInputId}',\n`;
         }
         if (this.form.enableCaptcha) {
-            opts += `    captchaContainerId: 'wtc-captcha',\n`;
+            opts += `    captchaContainerId: '${captchaId}',\n`;
         }
 
-        opts += `    errorContainerId: 'wtc-error',\n`;
-        opts += `    successContainerId: 'wtc-success',\n`;
+        opts += `    errorContainerId: '${errorId}',\n`;
+        opts += `    successContainerId: '${successId}',\n`;
         opts += `    onSuccess: function(caseNumber) {\n`;
         opts += `      console.log('Case created:', caseNumber);\n`;
         opts += `    },\n`;

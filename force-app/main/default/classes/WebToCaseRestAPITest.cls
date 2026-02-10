@@ -425,6 +425,76 @@ private class WebToCaseRestAPITest {
     }
 
     @isTest
+    static void testOriginValidationWwwPrefix() {
+        // www.example.com should match allowed domain 'example.com'
+        RestRequest req = new RestRequest();
+        req.requestURI = '/services/apexrest/webtocase/v1/form/embed-test-form';
+        req.httpMethod = 'GET';
+        req.headers.put('Origin', 'https://www.example.com');
+        RestContext.request = req;
+        RestContext.response = new RestResponse();
+
+        Test.startTest();
+        WebToCaseRestAPI.getFormConfig();
+        Test.stopTest();
+
+        RestResponse res = RestContext.response;
+        System.assertEquals(200, res.statusCode, 'www.example.com should match allowed domain example.com');
+    }
+
+    @isTest
+    static void testOriginValidationWwwPrefixReverse() {
+        // If allowed domain has www. but origin doesn't, should still match
+        // Add a form with www. in allowed domains
+        Form__c form = new Form__c(
+            Form_Name__c = 'www-test-form',
+            Title__c = 'WWW Test',
+            Active__c = true,
+            Allowed_Domains__c = 'www.testsite.org'
+        );
+        insert form;
+        insert new Form_Field__c(
+            Form__c = form.Id, Field_Label__c = 'Subject', Field_Type__c = 'Text',
+            Case_Field__c = 'Subject', Required__c = true, Sort_Order__c = 1
+        );
+
+        RestRequest req = new RestRequest();
+        req.requestURI = '/services/apexrest/webtocase/v1/form/www-test-form';
+        req.httpMethod = 'GET';
+        req.headers.put('Origin', 'https://testsite.org');  // No www
+        RestContext.request = req;
+        RestContext.response = new RestResponse();
+
+        Test.startTest();
+        WebToCaseRestAPI.getFormConfig();
+        Test.stopTest();
+
+        RestResponse res = RestContext.response;
+        System.assertEquals(200, res.statusCode, 'testsite.org should match allowed domain www.testsite.org');
+    }
+
+    @isTest
+    static void testCorsHeadersOnErrorResponse() {
+        // Error responses should include CORS headers so developers can read error messages
+        RestRequest req = new RestRequest();
+        req.requestURI = '/services/apexrest/webtocase/v1/form/embed-test-form';
+        req.httpMethod = 'GET';
+        req.headers.put('Origin', 'https://evil.com');
+        RestContext.request = req;
+        RestContext.response = new RestResponse();
+
+        Test.startTest();
+        WebToCaseRestAPI.getFormConfig();
+        Test.stopTest();
+
+        RestResponse res = RestContext.response;
+        System.assertEquals(403, res.statusCode, 'Should return 403');
+        // CORS headers should still be present for debugging
+        System.assertEquals('https://evil.com', res.headers.get('Access-Control-Allow-Origin'),
+            'CORS headers should be set even on error responses');
+    }
+
+    @isTest
     static void testOriginValidationSubdomainRejection() {
         RestRequest req = new RestRequest();
         req.requestURI = '/services/apexrest/webtocase/v1/form/embed-test-form';

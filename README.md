@@ -9,25 +9,25 @@ A Salesforce app that lets you create public web forms that submit Cases with fi
 The following items need manual verification in the dev org:
 
 ### Connect Mode (`WebToCaseForm.connect()`)
-- [ ] Create a standalone HTML page with a custom form layout
-- [ ] Include the widget script and call `WebToCaseForm.connect()` with correct apiBase/formName
-- [ ] Verify form submission creates a Case with correct field values
+- [x] Create a standalone HTML page with a custom form layout
+- [x] Include the widget script and call `WebToCaseForm.connect()` with correct apiBase/formName
+- [x] Verify form submission creates a Case with correct field values
 - [ ] Verify file upload works via `fileInputSelector` option
 - [ ] Verify CAPTCHA renders in the user-provided container (if enabled)
-- [ ] Verify validation errors appear in the user's error container and use `aria-invalid`
-- [ ] Verify success state hides the form and shows the success container with case number in `[data-wtc-case-number]`
+- [x] Verify validation errors appear in the user's error container and use `aria-invalid`
+- [x] Verify success state hides the form and shows the success container with case number in `[data-wtc-case-number]`
 - [ ] Verify `destroy()` cleans up event listeners (test re-initialization in SPA-like scenario)
 - [ ] Verify console warnings appear for missing `name` attributes on required fields
 
 ### Extended CSS Variables (Widget Mode)
-- [ ] Embed the widget on a test page and set `--wtc-container-max-width`, `--wtc-container-padding` — verify they take effect
-- [ ] Test title variables: `--wtc-title-font-size`, `--wtc-title-font-weight`, `--wtc-title-margin`
-- [ ] Test description variables: `--wtc-description-color`, `--wtc-description-font-size`
-- [ ] Test label variables: `--wtc-label-font-size`, `--wtc-label-font-weight`, `--wtc-label-color`
-- [ ] Test input variables: `--wtc-input-padding`, `--wtc-input-font-size`
-- [ ] Test field gap: `--wtc-field-gap`
-- [ ] Test submit button: `--wtc-submit-color`, `--wtc-submit-background`, `--wtc-submit-padding`, `--wtc-submit-font-size`, `--wtc-submit-border-radius`
-- [ ] Test success/error: `--wtc-success-background`, `--wtc-success-border`, `--wtc-error-background`, `--wtc-error-border`
+- [x] Embed the widget on a test page and set `--wtc-container-max-width`, `--wtc-container-padding` — verify they take effect
+- [x] Test title variables: `--wtc-title-font-size`, `--wtc-title-font-weight`, `--wtc-title-margin`
+- [x] Test description variables: `--wtc-description-color`, `--wtc-description-font-size`
+- [x] Test label variables: `--wtc-label-font-size`, `--wtc-label-font-weight`, `--wtc-label-color`
+- [x] Test input variables: `--wtc-input-padding`, `--wtc-input-font-size`
+- [x] Test field gap: `--wtc-field-gap`
+- [x] Test submit button: `--wtc-submit-color`, `--wtc-submit-background`, `--wtc-submit-padding`, `--wtc-submit-font-size`, `--wtc-submit-border-radius`
+- [x] Test success/error: `--wtc-success-background`, `--wtc-success-border`, `--wtc-error-background`, `--wtc-error-border`
 
 ### Admin UI (Embed Code Section)
 - [ ] Verify scoped tabs (Widget / Custom HTML / iframe) render with light blue active background
@@ -39,8 +39,8 @@ The following items need manual verification in the dev org:
 - [ ] Verify all Copy buttons work in all three tabs
 
 ### Regression
-- [ ] Verify existing `WebToCaseForm.render()` widget still works identically after the mixin refactor
-- [ ] Verify iframe embed still works
+- [x] Verify existing `WebToCaseForm.render()` widget still works identically after the mixin refactor
+- [x] Verify iframe embed still works
 
 ---
 
@@ -61,12 +61,12 @@ The following reCAPTCHA items need manual verification before release:
 
 | | |
 |---|---|
-| **Version** | v0.6.2 |
+| **Version** | v0.6.3 |
 | **Phases Complete** | 0-4 (MVP, Admin UI, Setup Wizard, reCAPTCHA, Embeddable Widget) |
 | **Next Up** | Phase 5 (Multi-file upload, custom field types) |
 | **Dev Org** | `devorg` (tilman.dietrich@gmail.com.dev) |
 | **GitHub** | https://github.com/tilman-d/salesforce-webtocase |
-| **Last Change** | Configuration Status Dashboard: hide when unconfigured + auto-refresh via LMS |
+| **Last Change** | CSS bug fixes, nonce retry, iframe embed support, CORS fix |
 
 ---
 
@@ -676,6 +676,13 @@ Access: `https://[your-domain].my.salesforce-sites.com/support/CaseFormPage?name
 force-app/main/default/
 ├── applications/
 │   └── Web_to_Case_Forms.app-meta.xml   # Phase 2 - Lightning App
+├── cachePartitions/
+│   └── WebToCase.cachePartition-meta.xml # Platform Cache for nonces
+├── corsWhitelistOrigins/
+│   ├── dietrich_ai.corsWhitelistOrigin-meta.xml
+│   └── dietrich_ai_bare.corsWhitelistOrigin-meta.xml
+├── cspTrustedSites/
+│   └── dietrich_ai.cspTrustedSite-meta.xml  # iframe embed trust
 ├── objects/
 │   ├── Form__c/                         # Form configuration
 │   │   └── fields/
@@ -732,6 +739,8 @@ force-app/main/default/
 │   └── imageCompression.js              # browser-image-compression library
 ├── remoteSiteSettings/
 │   └── Google_reCAPTCHA.remoteSite-meta.xml  # Phase 3
+├── sites/
+│   └── Support.site-meta.xml                # Salesforce Site config
 └── permissionsets/
     └── Web_to_Case_Admin.permissionset-meta.xml
 ```
@@ -772,6 +781,26 @@ force-app/main/default/
 ---
 
 ## Changelog
+
+### v0.6.3 (2026-02-10) - CSS Bug Fixes, Nonce Retry, iframe Embed Support
+- **6 CSS bug fixes in `caseFormWidget.js`**:
+  1. Added `box-sizing: border-box` to inputs and submit button (prevents overflow with padding)
+  2. Focus ring now respects `--wtc-primary-color` (was hardcoded Salesforce blue)
+  3. Case number color uses `--wtc-success-color` (was hardcoded green)
+  4. Disabled button uses `opacity: 0.6` instead of hardcoded gray (respects custom `--wtc-submit-background`)
+  5. Removed self-referencing CSS variable declarations from `:host` (dead code per CSS spec)
+  6. Error focus ring respects `--wtc-error-color` (was hardcoded red)
+- **Added explicit fallbacks** to all bare `var(--wtc-*)` references throughout widget CSS
+- **Transparent nonce retry**: On expired nonce errors, widget auto-fetches fresh config and resubmits once (no user action needed)
+- **iframe embed support**: Changed Site clickjack protection from `SameOriginOnly` to `AllowAllFraming` to allow iframe embedding on external domains
+- **CORS headers before errors**: Moved CORS header setting before error responses in all REST API endpoints so browsers can read error messages
+- **Nonce service fix**: Fixed Platform Cache API to use partition-qualified calls; reduced nonce key from 256-bit to 128-bit to fit 50-char cache key limit
+- **Snippet ID collisions fix**: Custom HTML tab in Admin UI now uses form-scoped IDs (`{formId}-file`, `{formId}-error`) instead of generic IDs
+- **New metadata**:
+  - `WebToCase.cachePartition` — Platform Cache partition for nonces
+  - `dietrich_ai.corsWhitelistOrigin` / `dietrich_ai_bare.corsWhitelistOrigin` — CORS whitelist for dietrich.ai
+  - `dietrich_ai.cspTrustedSite` — CSP trusted site for iframe embedding
+  - `Support.site` — Salesforce Site metadata with `AllowAllFraming`
 
 ### v0.6.2 (2026-02-10) - Configuration Status Dashboard: Hide When Unconfigured + Auto-Refresh
 - **setupStatus hidden when unconfigured**: Dashboard renders nothing when the org has no configuration, eliminating the redundant "Setup Not Complete" message
@@ -995,24 +1024,21 @@ See the **🧪 MANUAL TESTING REQUIRED** section at the top of this README for t
 
 ## Next Session Starting Point
 
-**Status:** Phases 0-4 complete. v0.6.2 deployed. **Needs manual testing** — see top of README. Ready for Phase 5 after testing.
+**Status:** Phases 0-4 complete. v0.6.3 deployed. **Needs manual testing** — see top of README. Ready for Phase 5 after testing.
 
-**Recent changes (v0.6.2):**
+**Recent changes (v0.6.3):**
+- 6 CSS bug fixes in widget (box-sizing, focus ring colors, disabled opacity, `:host` dead code cleanup)
+- Transparent nonce retry on expired nonces (auto-fetches fresh config and resubmits)
+- iframe embed enabled (AllowAllFraming on Site, CSP trusted site for dietrich.ai)
+- CORS headers sent before error responses in REST API
+- Nonce service: partition-qualified Platform Cache, 128-bit keys to fit 50-char limit
+- Snippet ID collisions fixed in Admin UI Custom HTML tab
+- New metadata: cachePartitions, corsWhitelistOrigins, cspTrustedSites, sites
+
+**Previous (v0.6.2):**
 - `setupStatus` hidden when unconfigured (no more "Setup Not Complete" card)
 - Auto-refresh via LMS when wizard reaches Step 6 — dashboard appears without page reload
 - New `SetupStatusRefresh` Lightning Message Channel for sibling component communication
-
-**Previous (v0.6.1):**
-- New `setupStatus` LWC: Configuration Status Dashboard embedded in Setup Wizard page
-- Setup Wizard progress indicator reverted to standard dot stepper (`type="base"`)
-
-**Previous (v0.6.0):**
-- Custom HTML connect mode: `WebToCaseForm.connect()` for full design control (no Shadow DOM)
-- Extended CSS variables: 28 variables for comprehensive widget theming
-- SubmissionMixin: internal refactor for code reuse between FormWidget and ConnectedForm
-- Admin UI: Embed Code section redesigned with scoped tabs (Widget / Custom HTML / iframe)
-- No backend changes — uses same REST endpoints
-- Deployed to devorg
 
 **File size limits (fixed):**
 | File Type | Limit | Behavior |
@@ -1200,6 +1226,27 @@ When creating the managed/unlocked package for AppExchange, include the followin
 |-------------|-----|-------------|
 | Google_reCAPTCHA | `https://www.google.com` | reCAPTCHA verification API |
 
+### Platform Cache Partitions (1)
+| Partition | API Name | Description |
+|-----------|----------|-------------|
+| WebToCase | `WebToCase` | Stores one-time nonces for replay attack prevention (15-min TTL) |
+
+### CORS Whitelist Origins (2)
+| Origin | API Name | Description |
+|--------|----------|-------------|
+| dietrich.ai (https) | `dietrich_ai` | Allow cross-origin requests from dietrich.ai |
+| dietrich.ai (bare) | `dietrich_ai_bare` | Allow cross-origin requests from dietrich.ai (http) |
+
+### CSP Trusted Sites (1)
+| Site | API Name | Description |
+|------|----------|-------------|
+| dietrich.ai | `dietrich_ai` | Allow dietrich.ai to embed Salesforce pages in iframes |
+
+### Custom Sites (1)
+| Site | API Name | Description |
+|------|----------|-------------|
+| Support | `Support` | Salesforce Site for public form access (AllowAllFraming for iframe embed) |
+
 ### Package.xml Example
 
 ```xml
@@ -1278,6 +1325,23 @@ When creating the managed/unlocked package for AppExchange, include the followin
         <members>SetupStatusRefresh</members>
         <name>LightningMessageChannel</name>
     </types>
+    <types>
+        <members>WebToCase</members>
+        <name>PlatformCachePartition</name>
+    </types>
+    <types>
+        <members>dietrich_ai</members>
+        <members>dietrich_ai_bare</members>
+        <name>CorsWhitelistOrigin</name>
+    </types>
+    <types>
+        <members>dietrich_ai</members>
+        <name>CspTrustedSite</name>
+    </types>
+    <types>
+        <members>Support</members>
+        <name>CustomSite</name>
+    </types>
     <version>59.0</version>
 </Package>
 ```
@@ -1297,3 +1361,9 @@ When creating the managed/unlocked package for AppExchange, include the followin
    - Grant Apex class and VF page access to Guest User profile
 
 5. **Test Coverage**: All Apex classes have >75% code coverage with dedicated test classes.
+
+6. **Platform Cache**: The `WebToCase` cache partition is required for nonce-based replay attack prevention. The org must have Platform Cache allocated (at least session cache).
+
+7. **CORS & CSP**: The `corsWhitelistOrigins` and `cspTrustedSites` entries are org-specific (dietrich.ai). For the AppExchange package, these should be excluded — customers configure their own domains via Salesforce Setup.
+
+8. **Site Metadata**: The `Support` site metadata includes `AllowAllFraming` for iframe embed support. Customers using iframe embed mode need this setting on their Site.
