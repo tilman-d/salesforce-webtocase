@@ -100,12 +100,12 @@ The following items need manual verification in the dev org:
 
 | | |
 |---|---|
-| **Version** | v0.7.1 |
+| **Version** | v0.7.2 |
 | **Phases Complete** | 0-4 (MVP, Admin UI, Setup Wizard, reCAPTCHA, Embeddable Widget) |
 | **Next Up** | AppExchange v1 submission / Phase 5 |
 | **Dev Org** | `devorg` (tilman.dietrich@gmail.com.dev) |
 | **GitHub** | https://github.com/tilman-d/salesforce-webtocase |
-| **Last Change** | Test coverage: WebToCaseNonceService 81%, SetupWizardController 86% |
+| **Last Change** | Fix Setup Wizard permission config error for required fields |
 
 ---
 
@@ -825,6 +825,13 @@ force-app/main/default/
 
 ## Changelog
 
+### v0.7.2 (2026-02-11) - Fix Setup Wizard Guest User Permission Error
+Fixed "INVALID_OR_NULL_FOR_RESTRICTED_PICKLIST" error when clicking "Configure Permissions" in the Setup Wizard (Step 3).
+
+**Root cause:** `Error_Log__c.Timestamp__c` is a required field (`<required>true</required>`). Salesforce automatically grants FLS (Read/Edit) on required fields to all profiles, so they don't appear in the `FieldPermissions` restricted picklist. The wizard was trying to upsert a `FieldPermissions` record for this field, which Salesforce rejected.
+
+**Fix:** Removed `Timestamp__c` from the `REQUIRED_FIELD_READ` map in `SetupWizardController` — no FLS configuration needed for required fields.
+
 ### v0.7.1 (2026-02-10) - Test Coverage for AppExchange Submission
 Increased test coverage for the two classes that were below the 75% AppExchange threshold.
 
@@ -1113,9 +1120,13 @@ See the **🧪 MANUAL TESTING REQUIRED** section at the top of this README for t
 
 ## Next Session Starting Point
 
-**Status:** Phases 0-4 complete. v0.7.1 deployed. All classes above 75% coverage. Ready for AppExchange submission (namespace prefix + managed package) or Phase 5.
+**Status:** Phases 0-4 complete. v0.7.2 deployed. All classes above 75% coverage. Ready for AppExchange submission (namespace prefix + managed package) or Phase 5.
 
-**Recent changes (v0.7.1):**
+**Recent changes (v0.7.2):**
+- Fixed Setup Wizard "Configure Permissions" error for `Error_Log__c.Timestamp__c`
+- Removed required field from `REQUIRED_FIELD_READ` map (FLS auto-granted by Salesforce)
+
+**Previous (v0.7.1):**
 - `WebToCaseNonceService` test coverage: 51% → 81% (14 new tests)
 - `SetupWizardController` test coverage: 50% → 86% (12 new tests)
 - 257/257 tests passing, 64% org-wide coverage

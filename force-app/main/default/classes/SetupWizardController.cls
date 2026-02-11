@@ -19,7 +19,7 @@ public with sharing class SetupWizardController {
     private static final Map<String, List<String>> REQUIRED_FIELD_READ = new Map<String, List<String>>{
         'Form__c' => new List<String>{'Description__c', 'Enable_File_Upload__c', 'Max_File_Size_MB__c', 'Success_Message__c'},
         'Form_Field__c' => new List<String>{'Required__c'},
-        'Error_Log__c' => new List<String>{'Error_Message__c', 'Form_Id__c', 'Timestamp__c'}
+        'Error_Log__c' => new List<String>{'Error_Message__c', 'Form_Id__c'}
     };
 
     // Apex classes that need access
