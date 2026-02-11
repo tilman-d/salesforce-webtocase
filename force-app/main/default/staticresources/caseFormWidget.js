@@ -1083,7 +1083,7 @@
         showFormError: function(message) {
             var errorDiv = this.shadowRoot.getElementById('wtcError');
             if (errorDiv) {
-                errorDiv.innerHTML = message;
+                errorDiv.textContent = message;
                 errorDiv.style.display = 'block';
             }
         },
@@ -1692,7 +1692,7 @@
          */
         showFormError: function(message) {
             if (this.errorEl) {
-                this.errorEl.innerHTML = message;
+                this.errorEl.textContent = message;
                 this.errorEl.hidden = false;
             }
         },
@@ -1703,7 +1703,7 @@
         hideError: function() {
             if (this.errorEl) {
                 this.errorEl.hidden = true;
-                this.errorEl.innerHTML = '';
+                this.errorEl.textContent = '';
             }
         },
 

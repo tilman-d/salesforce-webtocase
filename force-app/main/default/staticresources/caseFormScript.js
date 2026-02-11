@@ -786,7 +786,7 @@
     function showError(message) {
         var errorDiv = document.getElementById('errorMessage');
         if (errorDiv) {
-            errorDiv.innerHTML = message;
+            errorDiv.textContent = message;
             errorDiv.style.display = 'block';
             // Scroll to error
             errorDiv.scrollIntoView({ behavior: 'smooth', block: 'center' });

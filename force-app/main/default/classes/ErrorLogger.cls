@@ -2,7 +2,7 @@
  * ErrorLogger - Utility class for logging errors to Error_Log__c
  * Used for debugging issues in the public form submission process
  */
-public class ErrorLogger {
+public without sharing class ErrorLogger {
 
     /**
      * Log an error message with stack trace

@@ -2,7 +2,7 @@
  * WebToCaseRateLimiter - Rate limiting for embed widget submissions
  * Tracks submissions per origin per hour using Rate_Limit_Counter__c
  */
-public class WebToCaseRateLimiter {
+public without sharing class WebToCaseRateLimiter {
 
     // Default rate limit: 100 submissions per origin per hour
     private static final Integer DEFAULT_RATE_LIMIT = 100;

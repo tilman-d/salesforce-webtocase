@@ -4,7 +4,7 @@
     <flexiPageRegions>
         <itemInstances>
             <componentInstance>
-                <componentName>c:formAdminApp</componentName>
+                <componentName>caseform:formAdminApp</componentName>
                 <identifier>formAdminApp1</identifier>
             </componentInstance>
         </itemInstances>

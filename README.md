@@ -12,10 +12,7 @@ A Salesforce app that lets you create public web forms that submit Cases with fi
   - Nonce generation/validation round-trip, one-time use, expiry, formId/origin mismatch, case authorization, Platform Cache paths
 - [x] **Increase test coverage for `SetupWizardController` (50% → 86%)**
   - Real Site permission checking, configurePermissions, getPublicUrl, getConfigSummary, getFullStatus, saveDefaultSite, CRUD denial, no Guest User paths
-- [ ] **Register namespace prefix** (manual step in Salesforce UI)
-  - Go to Setup → Package Manager → Edit → register a namespace prefix
-  - Update `sfdx-project.json` with the namespace
-  - This is a one-time manual step — cannot be scripted
+- [x] **Register namespace prefix** → `caseform`
 - [ ] **Create managed package** in packaging org
   - Add all package components (see "AppExchange Package Metadata" section below)
   - Exclude org-specific metadata (CORS origins, CSP sites, Sites) — already in `.forceignore`
@@ -34,6 +31,11 @@ A Salesforce app that lets you create public web forms that submit Cases with fi
 - [x] `WebToCaseNonceService` test coverage: 51% → 81% (14 new tests)
 - [x] `SetupWizardController` test coverage: 50% → 86% (12 new tests)
 - [x] 257/257 tests passing
+- [x] FlexiPage deployment blocker fixed (namespace `caseform:` component references)
+- [x] DOM XSS sinks eliminated (`innerHTML` → `textContent` for error messages)
+- [x] Server error message leakage fixed (generic messages to client)
+- [x] Explicit sharing declarations added (`ErrorLogger`, `WebToCaseRateLimiter`)
+- [x] AggregateResult namespace robustness fix (`FormAdminController`)
 
 ### Scanner Notes
 
@@ -100,12 +102,13 @@ The following items need manual verification in the dev org:
 
 | | |
 |---|---|
-| **Version** | v0.7.2 |
+| **Namespace** | `caseform` |
+| **Version** | v0.7.3 |
 | **Phases Complete** | 0-4 (MVP, Admin UI, Setup Wizard, reCAPTCHA, Embeddable Widget) |
 | **Next Up** | AppExchange v1 submission / Phase 5 |
 | **Dev Org** | `devorg` (tilman.dietrich@gmail.com.dev) |
 | **GitHub** | https://github.com/tilman-d/salesforce-webtocase |
-| **Last Change** | Fix Setup Wizard permission config error for required fields |
+| **Last Change** | Security review fixes: XSS, sharing, FlexiPage namespace |
 
 ---
 
@@ -825,6 +828,30 @@ force-app/main/default/
 
 ## Changelog
 
+### v0.7.3 (2026-02-11) - AppExchange Security Review Fixes
+Fixes three blockers identified during pre-submission security audit.
+
+**1. FlexiPage deployment failure (hard blocker):**
+- Root cause: Org has registered namespace `caseform`, but FlexiPage XML referenced components with default `c:` prefix
+- Fixed `Form_Manager.flexipage-meta.xml` → `caseform:formAdminApp`
+- Fixed `Setup_Wizard.flexipage-meta.xml` → `caseform:setupStatus`, `caseform:setupWizard`
+- Added `targetConfigs` with `supportedFormFactors` to `formAdminApp.js-meta.xml` for consistency
+
+**2. DOM XSS sink elimination (security review risk):**
+- Replaced `innerHTML` with `textContent` for all error message rendering:
+  - `caseFormScript.js` (VF Remoting error display)
+  - `caseFormWidget.js` (widget + connect mode error display)
+- Replaced raw `e.getMessage()` in `CaseFormController.uploadFileChunk` catch block with generic message — exception details now logged server-side only via `ErrorLogger`
+
+**3. Explicit sharing declarations (security review risk):**
+- `ErrorLogger` → `public without sharing class` (must always insert `Error_Log__c` regardless of caller context; has CRUD checks)
+- `WebToCaseRateLimiter` → `public without sharing class` (must always access `Rate_Limit_Counter__c` for accurate rate limiting; has CRUD checks)
+
+**4. AggregateResult namespace robustness:**
+- Added field alias in `FormAdminController` aggregate query (`SELECT Form__c formId, COUNT(Id) cnt`) to avoid namespace-dependent key resolution in `AggregateResult.get()`
+
+**Test results:** 255/257 tests passing. 2 failures are `LeadConversionServiceTest` (non-package class, broken org Flow — pre-existing). All package tests pass.
+
 ### v0.7.2 (2026-02-11) - Fix Setup Wizard Guest User Permission Error
 Fixed "INVALID_OR_NULL_FOR_RESTRICTED_PICKLIST" error when clicking "Configure Permissions" in the Setup Wizard (Step 3).
 
@@ -1120,28 +1147,26 @@ See the **🧪 MANUAL TESTING REQUIRED** section at the top of this README for t
 
 ## Next Session Starting Point
 
-**Status:** Phases 0-4 complete. v0.7.2 deployed. All classes above 75% coverage. Ready for AppExchange submission (namespace prefix + managed package) or Phase 5.
+**Status:** Phases 0-4 complete. v0.7.3 deployed. All classes above 75% coverage. All security review blockers resolved. Ready for AppExchange submission (managed package creation) or Phase 5.
 
-**Recent changes (v0.7.2):**
+**Recent changes (v0.7.3):**
+- FlexiPage namespace fix: `c:` → `caseform:` component references (deployment blocker resolved)
+- DOM XSS eliminated: `innerHTML` → `textContent` for all error rendering paths
+- Server error messages sanitized: generic messages to client, details in `ErrorLogger` only
+- Explicit sharing: `without sharing` on `ErrorLogger` and `WebToCaseRateLimiter`
+- AggregateResult field alias in `FormAdminController` for namespace robustness
+
+**Previous (v0.7.2):**
 - Fixed Setup Wizard "Configure Permissions" error for `Error_Log__c.Timestamp__c`
-- Removed required field from `REQUIRED_FIELD_READ` map (FLS auto-granted by Salesforce)
 
 **Previous (v0.7.1):**
 - `WebToCaseNonceService` test coverage: 51% → 81% (14 new tests)
 - `SetupWizardController` test coverage: 50% → 86% (12 new tests)
 - 257/257 tests passing, 64% org-wide coverage
-- All AppExchange test coverage requirements met
 
 **Previous (v0.7.0):**
 - reCAPTCHA hidden from all admin UI for v1 MVP AppExchange release
-- Setup Wizard: 5 steps (was 6) — reCAPTCHA step removed, Complete renumbered
 - 4 files to toggle for v2 re-enablement (each marked with `v1 MVP` comments)
-
-**Previous (v0.6.3):**
-- 6 CSS bug fixes in widget (box-sizing, focus ring colors, disabled opacity, `:host` dead code cleanup)
-- Transparent nonce retry on expired nonces (auto-fetches fresh config and resubmits)
-- iframe embed enabled (AllowAllFraming on Site, CSP trusted site for dietrich.ai)
-- CORS headers sent before error responses in REST API
 
 **File size limits (fixed):**
 | File Type | Limit | Behavior |

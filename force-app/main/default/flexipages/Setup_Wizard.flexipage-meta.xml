@@ -4,13 +4,13 @@
     <flexiPageRegions>
         <itemInstances>
             <componentInstance>
-                <componentName>c:setupStatus</componentName>
+                <componentName>caseform:setupStatus</componentName>
                 <identifier>setupStatus1</identifier>
             </componentInstance>
         </itemInstances>
         <itemInstances>
             <componentInstance>
-                <componentName>c:setupWizard</componentName>
+                <componentName>caseform:setupWizard</componentName>
                 <identifier>setupWizard1</identifier>
             </componentInstance>
         </itemInstances>

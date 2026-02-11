@@ -180,11 +180,11 @@ public with sharing class FormAdminController {
         // Query forms with aggregate count of fields
         Map<Id, Integer> fieldCounts = new Map<Id, Integer>();
         for (AggregateResult ar : [
-            SELECT Form__c, COUNT(Id) cnt
+            SELECT Form__c formId, COUNT(Id) cnt
             FROM Form_Field__c
             GROUP BY Form__c
         ]) {
-            fieldCounts.put((Id)ar.get('Form__c'), (Integer)ar.get('cnt'));
+            fieldCounts.put((Id)ar.get('formId'), (Integer)ar.get('cnt'));
         }
 
         // Get default Site info once

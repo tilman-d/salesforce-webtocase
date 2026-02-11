@@ -553,7 +553,7 @@ global without sharing class CaseFormController {
         } catch (Exception e) {
             ErrorLogger.logException(e, caseId);
             result.put('success', false);
-            result.put('error', 'Error uploading file chunk: ' + e.getMessage());
+            result.put('error', 'Error uploading file chunk. Please try again.');
         }
 
         return result;
