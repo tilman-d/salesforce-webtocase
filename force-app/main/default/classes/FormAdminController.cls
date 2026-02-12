@@ -201,9 +201,6 @@ public with sharing class FormAdminController {
             ORDER BY CreatedDate DESC
         ];
 
-        // FLS enforcement
-        forms = (List<Form__c>) Security.stripInaccessible(AccessType.READABLE, forms).getRecords();
-
         for (Form__c form : forms) {
             if (String.isNotBlank(form.Site_Id__c)) {
                 siteIds.add(form.Site_Id__c);
@@ -261,8 +258,7 @@ public with sharing class FormAdminController {
             throw createException('Form not found');
         }
 
-        // FLS enforcement
-        Form__c form = (Form__c) Security.stripInaccessible(AccessType.READABLE, forms).getRecords()[0];
+        Form__c form = forms[0];
         FormWrapper wrapper = new FormWrapper(form, 0);
 
         // Compute public URL
@@ -283,9 +279,6 @@ public with sharing class FormAdminController {
             WHERE Form__c = :formId
             ORDER BY Sort_Order__c ASC NULLS LAST
         ];
-
-        // FLS enforcement
-        fields = (List<Form_Field__c>) Security.stripInaccessible(AccessType.READABLE, fields).getRecords();
 
         wrapper.fieldCount = fields.size();
         for (Form_Field__c field : fields) {
@@ -383,13 +376,6 @@ public with sharing class FormAdminController {
         }
 
         try {
-            // FLS enforcement: strip inaccessible fields before DML.
-            // Re-set Id after strip since stripInaccessible clears it.
-            Id savedId = form.Id;
-            form = (Form__c) Security.stripInaccessible(AccessType.UPSERTABLE, new List<Form__c>{ form }).getRecords()[0];
-            if (savedId != null) {
-                form.Id = savedId;
-            }
             upsert form;
             return form.Id;
         } catch (DmlException e) {
@@ -506,29 +492,6 @@ public with sharing class FormAdminController {
                 delete fieldsToDelete;
             }
             if (!fieldsToUpsert.isEmpty()) {
-                // FLS enforcement: strip inaccessible fields before DML.
-                // Preserve Id and Form__c lookup since stripInaccessible clears them.
-                // Form__c is a master-detail (required) field that is always writable
-                // if the user has create access to the object.
-                Map<Integer, Id> idMap = new Map<Integer, Id>();
-                Map<Integer, Id> formLookupMap = new Map<Integer, Id>();
-                for (Integer i = 0; i < fieldsToUpsert.size(); i++) {
-                    if (fieldsToUpsert[i].Id != null) {
-                        idMap.put(i, fieldsToUpsert[i].Id);
-                    }
-                    if (fieldsToUpsert[i].Form__c != null) {
-                        formLookupMap.put(i, fieldsToUpsert[i].Form__c);
-                    }
-                }
-                fieldsToUpsert = (List<Form_Field__c>) Security.stripInaccessible(
-                    AccessType.UPSERTABLE, fieldsToUpsert
-                ).getRecords();
-                for (Integer idx : idMap.keySet()) {
-                    fieldsToUpsert[idx].Id = idMap.get(idx);
-                }
-                for (Integer idx : formLookupMap.keySet()) {
-                    fieldsToUpsert[idx].Form__c = formLookupMap.get(idx);
-                }
                 upsert fieldsToUpsert;
             }
         } catch (DmlException e) {

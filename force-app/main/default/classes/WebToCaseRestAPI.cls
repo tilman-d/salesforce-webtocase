@@ -78,10 +78,6 @@ global without sharing class WebToCaseRestAPI {
 
             Form__c form = forms[0];
 
-            // FLS enforcement: strip inaccessible fields from Form__c
-            SObjectAccessDecision formDecision = Security.stripInaccessible(AccessType.READABLE, new List<Form__c>{ form });
-            form = (Form__c) formDecision.getRecords()[0];
-
             // Get form fields
             List<Form_Field__c> fields = [
                 SELECT Id, Field_Label__c, Field_Type__c, Case_Field__c, Required__c, Sort_Order__c
@@ -89,9 +85,6 @@ global without sharing class WebToCaseRestAPI {
                 WHERE Form__c = :form.Id
                 ORDER BY Sort_Order__c ASC
             ];
-
-            // FLS enforcement: strip inaccessible fields from Form_Field__c
-            fields = (List<Form_Field__c>) Security.stripInaccessible(AccessType.READABLE, fields).getRecords();
 
             // Build allowed fields list
             List<String> allowedFields = new List<String>();

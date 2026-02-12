@@ -2,11 +2,20 @@
   "packageDirectories": [
     {
       "path": "force-app",
-      "default": true
+      "default": true,
+      "versionName": "v1.0",
+      "versionNumber": "1.0.0.NEXT",
+      "package": "Web-to-Case Forms",
+      "versionDescription": "Web-to-Case with file attachments, admin UI, setup wizard, and embeddable widget"
     }
   ],
   "name": "webtocase",
-  "namespace": "",
+  "namespace": "caseform",
   "sfdcLoginUrl": "https://login.salesforce.com",
-  "sourceApiVersion": "59.0"
+  "sourceApiVersion": "59.0",
+  "packageAliases": {
+    "Web-to-Case Forms": "0Hod20000000XlZCAU",
+    "Web-to-Case Forms@1.0.0-1": "04td2000000K8vtAAC",
+    "Web-to-Case Forms@1.0.0-2": "04td2000000K8xVAAS"
+  }
 }

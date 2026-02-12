@@ -392,6 +392,7 @@ public with sharing class SetupWizardController {
     /**
      * Dynamically derive the Site's base URL
      */
+    @TestVisible
     private static String getSiteBaseUrl(Site s) {
         try {
             // Use SiteDetail to get the secure URL
@@ -515,6 +516,7 @@ public with sharing class SetupWizardController {
      * Note: ObjectPermissions is a setup entity — CRUD checks on setup objects are not
      * enforced since this method runs in admin-only (with sharing) context.
      */
+    @TestVisible
     private static PermissionStatus checkObjectPermission(Id permSetId, String objectName, String permType) {
         PermissionStatus ps = new PermissionStatus();
         ps.name = objectName + ' ' + permType;
@@ -551,6 +553,7 @@ public with sharing class SetupWizardController {
     /**
      * Check field permission for a permission set
      */
+    @TestVisible
     private static PermissionStatus checkFieldPermission(Id permSetId, String objectName, String fieldName) {
         PermissionStatus ps = new PermissionStatus();
         ps.name = objectName + '.' + fieldName + ' Read';
@@ -578,6 +581,7 @@ public with sharing class SetupWizardController {
     /**
      * Check Apex class access for a profile
      */
+    @TestVisible
     private static PermissionStatus checkApexAccess(Id profileId, String className) {
         PermissionStatus ps = new PermissionStatus();
         ps.name = className + ' Apex Class';
@@ -618,6 +622,7 @@ public with sharing class SetupWizardController {
     /**
      * Check VF page access for a profile
      */
+    @TestVisible
     private static PermissionStatus checkVfPageAccess(Id profileId, String pageName) {
         PermissionStatus ps = new PermissionStatus();
         ps.name = pageName + ' VF Page';
@@ -733,6 +738,7 @@ public with sharing class SetupWizardController {
     /**
      * Configure object permission (idempotent)
      */
+    @TestVisible
     private static PermissionStatus configureObjectPermission(Id permSetId, String objectName, String permType) {
         PermissionStatus ps = new PermissionStatus();
         ps.name = objectName + ' ' + permType;
@@ -792,6 +798,7 @@ public with sharing class SetupWizardController {
     /**
      * Configure field permission (idempotent)
      */
+    @TestVisible
     private static PermissionStatus configureFieldPermission(Id permSetId, String objectName, String fieldName) {
         PermissionStatus ps = new PermissionStatus();
         ps.name = objectName + '.' + fieldName + ' Read';

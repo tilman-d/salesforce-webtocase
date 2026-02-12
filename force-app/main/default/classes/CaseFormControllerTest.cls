@@ -10,6 +10,10 @@ private class CaseFormControllerTest {
      */
     @TestSetup
     static void setupTestData() {
+        // Assign permission set for FLS in 2GP packaging context
+        PermissionSet ps = [SELECT Id FROM PermissionSet WHERE Name = 'Web_to_Case_Admin' LIMIT 1];
+        insert new PermissionSetAssignment(AssigneeId = UserInfo.getUserId(), PermissionSetId = ps.Id);
+
         // Create test form
         Form__c testForm = new Form__c(
             Form_Name__c = 'test-form',
